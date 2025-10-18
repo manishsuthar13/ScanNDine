@@ -1,0 +1,1 @@
+# ScanNDine - MERN stack project
