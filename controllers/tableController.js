@@ -23,6 +23,16 @@ const createTable = async (req, res) => {
   }
 };
 
+// Delete table (admin)
+const deleteTable = async (req, res) => {
+  try {
+    await Table.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Table deleted' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 // Get table by slug (public, for QR)
 const getTableBySlug = async (req, res) => {
   const { slug } = req.params;
@@ -35,4 +45,23 @@ const getTableBySlug = async (req, res) => {
   }
 };
 
-module.exports = { getTables, createTable, getTableBySlug };
+// Generate QR code for a table (returns base64 image data)
+const generateQR = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const table = await Table.findById(id);
+    if (!table) return res.status(404).json({ message: 'Table not found' });
+    
+    const qrUrl = `http://localhost:3000/menu?table=${table.qrSlug}`; // Update to production URL if deploying
+    const QRCode = require('qrcode');
+    const qrData = await QRCode.toDataURL(qrUrl); // Generates base64 image
+    
+    res.json({ qrData, qrUrl }); // Send base64 for display/download
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+module.exports = { getTables, createTable, deleteTable, getTableBySlug, generateQR };
+
+module.exports = { getTables, createTable, deleteTable, getTableBySlug };

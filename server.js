@@ -12,10 +12,10 @@ connectDB();
 app.use(cors());
 app.use(express.json());
 
+app.use('/uploads', express.static('uploads'));  // Serve uploaded images
 // Routes
 const authRoutes = require('./routes/auth');
 app.use('/api/auth', authRoutes);
-
 
 const menuRoutes = require('./routes/menu');
 const tableRoutes = require('./routes/table');

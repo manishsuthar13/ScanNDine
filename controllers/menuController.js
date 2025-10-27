@@ -1,7 +1,6 @@
 const MenuCategory = require('../models/MenuCategory');
 const MenuItem = require('../models/MenuItem');
 
-// Get all categories
 const getCategories = async (req, res) => {
   try {
     const categories = await MenuCategory.find({ active: true }).sort({ displayOrder: 1 });
@@ -11,27 +10,15 @@ const getCategories = async (req, res) => {
   }
 };
 
-// Get menu items with filters
 const getItems = async (req, res) => {
-  const { search, category, sort, page = 1, limit = 10 } = req.query;
   try {
-    let query = { availability: true };
-    if (search) query.$or = [{ name: { $regex: search, $options: 'i' } }, { tags: { $in: [new RegExp(search, 'i')] } }];
-    if (category) query.categoryId = category;
-
-    const items = await MenuItem.find(query)
-      .populate('categoryId', 'name')
-      .sort(sort === 'price' ? { price: 1 } : { name: 1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
+    const items = await MenuItem.find({}).populate('categoryId', 'name');
     res.json(items);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// Admin: Create category
 const createCategory = async (req, res) => {
   const { name, displayOrder } = req.body;
   try {
@@ -43,30 +30,53 @@ const createCategory = async (req, res) => {
   }
 };
 
-// Admin: Create item
 const createItem = async (req, res) => {
-  const { name, description, price, categoryId, imageUrl, tags } = req.body;
   try {
-    const item = new MenuItem({ name, description, price, categoryId, imageUrl, tags });
+    const { name, description, price, categoryId, availability } = req.body;
+    const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    const item = new MenuItem({
+      name,
+      description,
+      price: parseFloat(price),
+      categoryId,
+      imageUrl,
+      availability: availability === 'true'
+    });
     await item.save();
     res.status(201).json(item);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// Admin: Update item
 const updateItem = async (req, res) => {
   const { id } = req.params;
   try {
-    const item = await MenuItem.findByIdAndUpdate(id, req.body, { new: true });
+    let updateData = {};
+    if (req.file) {
+      // FormData case (for full update with image)
+      updateData = {
+        name: req.body.name,
+        description: req.body.description,
+        price: parseFloat(req.body.price),
+        categoryId: req.body.categoryId,
+        availability: req.body.availability === 'true',
+        imageUrl: `/uploads/${req.file.filename}`
+      };
+    } else {
+      // JSON case (for toggle)
+      updateData = req.body;
+      if (updateData.availability !== undefined) updateData.availability = updateData.availability === 'true' || updateData.availability === true;
+    }
+    const item = await MenuItem.findByIdAndUpdate(id, updateData, { new: true });
     res.json(item);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// Admin: Delete item
+
 const deleteItem = async (req, res) => {
   const { id } = req.params;
   try {
