@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
-const { getTables, createTable, deleteTable, getTableBySlug } = require('../controllers/tableController');
+const { getTables, createTable, deleteTable, getTableBySlug, generateQR } = require('../controllers/tableController');
 const router = express.Router();
 
 // Get all tables

@@ -63,5 +63,3 @@ const generateQR = async (req, res) => {
 };
 
 module.exports = { getTables, createTable, deleteTable, getTableBySlug, generateQR };
-
-module.exports = { getTables, createTable, deleteTable, getTableBySlug };
