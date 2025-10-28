@@ -1,7 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { api } from '../services/api';
+import {useNavigate} from 'react-router-dom';
 
 const Staff = () => {
+  const navigate = useNavigate();
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,14 +42,14 @@ const Staff = () => {
 
   useEffect(() => {
     if (!localStorage.getItem('token')) {
-      window.location.href = '/';
+      navigate('/');
       return;
     }
     loadOrders();
     loadStaffDetails();
     const interval = setInterval(loadOrders, 10000);
     return () => clearInterval(interval);
-  }, [loadOrders]);
+  }, [loadOrders, navigate]);
 
   const loadStaffDetails = () => {
     api.getStaffDetails().then(res => {
@@ -63,19 +65,6 @@ const Staff = () => {
     api.updateOrderStatus(id, { status }).then(() => loadOrders());
   };
 
-//   const updateStatus = async (orderId, newStatus) => {
-//   await fetch(`/api/orders/${orderId}`, {
-//     method: "PUT",
-//     headers: { "Content-Type": "application/json" },
-//     body: JSON.stringify({ status: newStatus }),
-//   });
-
-//   // ✅ Re-fetch orders in Staff dashboard
-//   loadOrders();
-// };
-
-
-
   const deleteOrder = async (id) => {
   try {
     await api.deleteOrder(id);
@@ -84,16 +73,7 @@ const Staff = () => {
     alert('Failed to delete order');
   }
 };
-  // const sendQuery = () => {
-  //   if (!queryMessage.trim()) return;
-  //   api.sendQuery({ message: queryMessage }).then(() => {
-  //     alert('Query sent to admin');
-  //     setQueryMessage('');
-  //   }).catch(err => {
-  //     console.error(err);
-  //     alert('Failed to send query: ' + (err.response?.data?.message || 'Unknown error'));
-  //   });
-  // };
+
   const sendQuery = async () => {
     if (!queryMessage.trim()) return;
     const token = localStorage.getItem('token');
@@ -114,7 +94,7 @@ const Staff = () => {
   const handleLogout = () => {
     api.logout().then(() => {
       localStorage.clear();
-      window.location.href = '/';
+      navigate ('/');
     });
   };
 
@@ -122,7 +102,7 @@ const Staff = () => {
     if (window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
       api.removeStaff(staffDetails._id).then(() => {
         alert('Account deleted successfully.');
-        handleLogout();
+        navigate('/');
       }).catch(() => alert('Failed to delete account.'));
     }
   };

@@ -10,7 +10,6 @@ const menuItemSchema = new mongoose.Schema({
   tags: [{ type: String }], // For search
 }, { timestamps: true });
 
-// Compound index for filtering by category and name
 menuItemSchema.index({ categoryId: 1, name: 1 });
 
 module.exports = mongoose.model('MenuItem', menuItemSchema);

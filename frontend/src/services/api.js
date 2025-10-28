@@ -6,10 +6,8 @@ const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
-// const getAuthHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
 
 export const api = {
-  // getQueries: () => axios.get(`${API_BASE}/auth/queries`, { headers: getAuthHeaders() }),
   generateQR: (id) => axios.get(`${API_BASE}/tables/${id}/qr`, { headers: getAuthHeaders() }),
   getMenuCategories: () => axios.get(`${API_BASE}/menu/categories`, { headers: getAuthHeaders() }),
   createCategory: (data) => axios.post(`${API_BASE}/menu/categories`, data, { headers: getAuthHeaders() }),
@@ -36,7 +34,6 @@ export const api = {
   removeStaff: (id) => axios.delete(`${API_BASE}/auth/remove-staff/${id}`, { headers: getAuthHeaders() }),
   getOrderById: (id) => axios.get(`${API_BASE}/orders/${id}`),
   placeOrder: (data) => axios.post(`${API_BASE}/orders`, data, { headers: getAuthHeaders() }),
-  // sendQuery: (data) => axios.post(`${API_BASE}/auth/queries`, data, { headers: getAuthHeaders() }),  // Fixed URL to /api/auth/queries
   getStaffDetails: () => axios.get(`${API_BASE}/auth/staff-details`, { headers: getAuthHeaders() }),
   getAllStaff: () => axios.get(`${API_BASE}/auth/all-staff`, { headers: getAuthHeaders() }),
   updateStaffDetails: (data) => axios.put(`${API_BASE}/auth/update-details`, data, { headers: getAuthHeaders() }),

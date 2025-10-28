@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AdminOverview from '../components/AdminOverview';
 import AdminMenu from '../components/AdminMenu';
 import AdminTables from '../components/AdminTables';
@@ -8,10 +9,11 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [showAccount, setShowAccount] = useState(false);
   const [adminDetails, setAdminDetails] = useState({ name: 'A' });
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!localStorage.getItem('token')) {
-      window.location.href = '/';
+      navigate('/');
       return;
     }
 
@@ -28,12 +30,12 @@ const Admin = () => {
     fetchAdminDetails();
 
     setLoading(false);
-  }, []);
+  }, [navigate]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
-    window.location.href = '/';
+    navigate('/');
   };
 
   const getInitials = (name) => {

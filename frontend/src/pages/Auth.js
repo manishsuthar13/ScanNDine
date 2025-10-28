@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { api } from '../services/api';
+import {useNavigate} from 'react-router-dom';
 
 const Auth = () => {
+  const navigate = useNavigate();
   const [mode, setMode] = useState('login'); // 'login' or 'signup'
   const [role, setRole] = useState('customer'); // For signup only
   const [form, setForm] = useState({ name: '', email: '', password: '' });
@@ -17,7 +19,7 @@ const Auth = () => {
         // Decode token to get role
         const decoded = JSON.parse(atob(res.data.accessToken.split('.')[1]));
         const userRole = decoded.role;
-        window.location.href = userRole === 'admin' ? '/admin' : userRole === 'staff' ? '/staff' : '/menu';
+        navigate(userRole === 'admin' ? '/admin' : userRole === 'staff' ? '/staff' : '/menu');
       } else {
         await api.register({ ...form, role });  // Send selected role for signup
         alert('Registered! Please login.');
@@ -52,7 +54,7 @@ const Auth = () => {
           {error && <p className="text-red-500 mb-4">{error}</p>}
           <button type="submit" className="w-full bg-green-500 text-white py-3 rounded hover:bg-green-600">{mode === 'login' ? 'Login' : 'Signup'}</button>
         </form>
-        {mode === 'login' && <button onClick={() => window.location.href = '/menu'} className="w-full bg-blue-500 text-white py-3 rounded mt-4 hover:bg-blue-600">Continue as Guest</button>}
+        {mode === 'login' && <button onClick={() => navigate('/menu')} className="w-full bg-blue-500 text-white py-3 rounded mt-4 hover:bg-blue-600">Continue as Guest</button>}
       </div>
     </div>
   );

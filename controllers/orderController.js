@@ -1,22 +1,6 @@
 const Order = require('../models/Order');
 const MenuItem = require('../models/MenuItem');
 
-// Place order (customer)
-// const placeOrder = async (req, res) => {
-//   const { tableId, items } = req.body;
-//   try {
-//     let total = 0;
-//     for (let item of items) {
-//       const menuItem = await MenuItem.findById(item.menuItemId);
-//       total += menuItem.price * item.qty;
-//     }
-//     const order = new Order({ tableId, items, totals: total });
-//     await order.save();
-//     res.status(201).json(order);
-//   } catch (error) {
-//     res.status(500).json({ message: 'Server error' });
-//   }
-// };
 const placeOrder = async (req, res) => {
   const { tableId, items } = req.body;
   try {
@@ -84,64 +68,13 @@ const deleteOrder = async (req, res) => {
   }
 };
 
-// Get customer order history (if logged in)
-// const getCustomerOrders = async (req, res) => {
-//   try {
-//     const orders = await Order.find({ tableId: req.query.tableId }).populate('items.menuItemId', 'name price');
-//     res.json(orders);
-//   } catch (error) {
-//     res.status(500).json({ message: 'Server error' });
-//   }
-// };
-// const getCustomerOrders = async (req, res) => {
-//   try {
-    // For logged-in users, if we add userId to Order model later, filter by userId
-    // For now, since no userId, return all orders (adjust as needed)
-//     const orders = await Order.find({userId: req.user._id}).populate('tableId', 'number').populate('items.menuItemId', 'name price').sort({ createdAt: -1 });
-//     res.json(orders);
-//   } catch (error) {
-//     res.status(500).json({ message: 'Server error' });
-//   }
-// };
-
-// Project/ScanNDine/controllers/orderController.js
-// const getCustomerOrders = async (req, res) => {
-//   try {
-//     let query = {};
-    
-    // For logged-in customers, filter by userId
-    // if (req.user && req.user.role === 'customer') {
-    //   query.userId = req.user._id;
-    // } else {
-      // For guests, require tableId query param
-//       const tableId = req.query.table;
-//       if (!tableId) {
-//         return res.status(400).json({ message: 'Table ID is required for guest orders' });
-//       }
-//       query.tableId = tableId;
-//     }
-
-//     const orders = await Order.find(query)
-//       .populate('tableId', 'number')
-//       .populate('items.menuItemId', 'name price')
-//       .sort({ createdAt: -1 });
-
-//     res.json(orders);
-//   } catch (error) {
-//     console.error('getCustomerOrders error:', error);
-//     res.status(500).json({ message: 'Failed to fetch orders' });
-//   }
-// };
-
 const getCustomerOrders = async (req, res) => {
-  console.log('getCustomerOrders: req.user:', req.user); // Debug: Check if user is set
-  try {
+ try {
     let query = {};
     
     // For logged-in customers, filter by userId
     if (req.user && req.user.role === 'customer') {
       query.userId = req.user._id;
-      console.log('getCustomerOrders: Filtering by userId:', query.userId); // Debug
     } else {
       // For guests, require tableId query param
       const tableId = req.query.table;
@@ -167,7 +100,6 @@ const getCustomerOrders = async (req, res) => {
       .populate('items.menuItemId', 'name price')
       .sort({ createdAt: -1 });
 
-    console.log('getCustomerOrders: Found orders:', orders.length); // Debug: Number of orders
     res.json(orders); // Show all orders, including 'cleared'
   } catch (error) {
     console.error('getCustomerOrders error:', error);

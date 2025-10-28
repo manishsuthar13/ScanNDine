@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import {useNavigate} from 'react-router-dom';
 
 const Menu = () => {
+  const navigate = useNavigate();
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('token'));
   const [userDetails, setUserDetails] = useState({ name: '', email: '' });
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -92,43 +94,6 @@ useEffect(() => {
     }
   };
 
-//   const fetchOrders = async () => {
-//   try {
-//     const res = await api.getCustomerOrders(); // ✅ Right endpoint for customer
-//     setOrders(res.data);
-//   } catch (err) {
-//     console.log("Failed to fetch customer orders:", err.response?.data || err);
-//   }
-// };
-
-// const fetchOrders = async () => {
-//   try {
-    // Get table ID from URL query params
-//     const urlParams = new URLSearchParams(window.location.search);
-//     const tableId = urlParams.get('table');
-    
-//     let response;
-//     if (isLoggedIn) {
-      // Logged in customer - fetch their orders
-//       response = await api.getCustomerOrders();
-//     } else if (tableId) {
-//       // Guest with table - fetch table orders
-//       response = await api.getCustomerOrders({ 
-//         params: { table: tableId }
-//       });
-//     } else {
-      // Guest without table - show empty state
-//       setOrders([]);
-//       return;
-//     }
-    
-//     setOrders(response.data);
-//   } catch (err) {
-//     console.error("Failed to fetch customer orders:", err.response?.data || err);
-//     setError(err.response?.data?.message || 'Failed to load orders');
-//   }
-// };
-
 
   const loadMenuData = async () => {
     try {
@@ -184,6 +149,7 @@ useEffect(() => {
     setUserDetails({ name: '', email: '' });
     setShowHistory(false);
     setCart([]);
+    navigate('/');
   };
 
   const fetchHistory = async () => {
@@ -200,7 +166,7 @@ useEffect(() => {
         setIsLoggedIn(false);
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
-        window.location.href = '/';
+        navigate ('/');
         return;
       }
     }
