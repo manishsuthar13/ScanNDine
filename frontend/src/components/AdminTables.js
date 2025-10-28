@@ -48,13 +48,14 @@ const AdminTables = () => {
   };
 
   const showQR = (table) => {
-    const qrData = storedQRs[table._id];
-    if (qrData) {
-      setQrModal({ qrData, qrUrl: `http://localhost:3000/menu?table=${table.qrSlug}`, table });
-    } else {
-      alert('QR not generated yet. Click Generate QR first.');
-    }
-  };
+  const qrData = storedQRs[table._id];
+  if (qrData) {
+    const baseUrl = process.env.REACT_APP_API_BASE ? process.env.REACT_APP_API_BASE.replace('/api', '') : 'http://localhost:3000'; // Dynamic base
+    setQrModal({ qrData, qrUrl: `${baseUrl}/menu?table=${table.qrSlug}`, table });
+  } else {
+    alert('QR not generated yet. Click Generate QR first.');
+  }
+};
 
   const downloadQR = () => {
     if (!qrModal) return;
