@@ -56,17 +56,18 @@ const register = [
 ];
 
 // Login
+// Login
 const login = [
   body('email').isEmail().withMessage('Valid email is required'),
   body('password').notEmpty().withMessage('Password is required'),
-  body('role').isIn(['customer', 'staff', 'admin']).withMessage('Invalid role'),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { email, password, role } = req.body;
+    const { email, password } = req.body;
     try {
-      const user = await User.findOne({ email, role });
+      // Find user by email only (role will be determined from DB)
+      const user = await User.findOne({ email });
       if (!user || !(await user.comparePassword(password))) {
         return res.status(401).json({ message: 'Invalid credentials' });
       }

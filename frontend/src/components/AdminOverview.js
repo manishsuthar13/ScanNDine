@@ -327,21 +327,47 @@ const AdminOverview = ({ setSection = () => {}, hideHeader = false }) => {
       </div>
 
       {/* Analytics Section */}
-      <div className="mb-6 bg-white p-6 rounded-lg shadow-md">
-        <h3 className="text-xl font-semibold mb-2">Analytics</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-blue-100 p-4 rounded">
-            <h4 className="font-bold">Total Orders</h4>
-            <p className="text-2xl">{analytics.totalOrders || 0}</p>
-          </div>
-          <div className="bg-green-100 p-4 rounded">
-            <h4 className="font-bold">Total Revenue</h4>
-            <p className="text-2xl">${analytics.totalRevenue || 0}</p>
+<div className="mb-6 bg-white p-6 rounded-lg shadow-md">
+  <h3 className="text-xl font-semibold mb-2">Analytics</h3>
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="bg-blue-100 p-4 rounded">
+      <h4 className="font-bold">Total Orders</h4>
+      <p className="text-2xl">{analytics.totalOrders || 0}</p>
+    </div>
+    <div className="bg-green-100 p-4 rounded">
+      <h4 className="font-bold">Total Revenue</h4>
+      <p className="text-2xl">₹{analytics.totalRevenue || 0}</p>
+    </div>
+  </div>
+  <h4 className="font-bold mt-4">Category/Dish Breakdown</h4>
+  {analytics.itemBreakdown && analytics.itemBreakdown.length > 0 ? (
+    <div className="mt-4 space-y-4">
+      {Object.entries(
+        analytics.itemBreakdown.reduce((acc, item) => {
+          if (!acc[item.categoryName]) acc[item.categoryName] = [];
+          acc[item.categoryName].push(item);
+          return acc;
+        }, {})
+      ).map(([category, items]) => (
+        <div key={category} className="border-t pt-4">
+          <h5 className="font-semibold text-lg">{category}</h5>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
+            {items.map(item => (
+              <div key={item._id} className="bg-gray-50 p-4 rounded shadow">
+                {item.imageUrl && <img src={item.imageUrl} alt={item.name} className="w-full h-24 object-cover rounded mb-2" />}
+                <h6 className="font-bold">{item.name}</h6>
+                <p className="text-sm text-gray-600">{item.description}</p>
+                <p className="text-green-600 font-semibold">Ordered: {item.count} times</p>
+              </div>
+            ))}
           </div>
         </div>
-        <h4 className="font-bold mt-4">Category/Dish Breakdown</h4>
-        <p className="text-gray-500">No orders yet. Data will appear here.</p>
-      </div>
+      ))}
+    </div>
+  ) : (
+    <p className="text-gray-500">No orders yet. Data will appear here.</p>
+  )}
+</div>
     </div>
   );
 };

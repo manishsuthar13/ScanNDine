@@ -3,8 +3,10 @@ const { placeOrder, getOrders, updateOrderStatus, deleteOrder, getCustomerOrders
 const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
+const { optionalAuthenticate } = require('../middleware/auth');
 
-router.post('/', placeOrder); // Public for guests
+router.get('/me', optionalAuthenticate, getCustomerOrders); // Now sets req.user if token present
+router.post('/', optionalAuthenticate, placeOrder); // Public for guests
 router.get('/me',getCustomerOrders); // Public - controller handles both guest and authenticated cases
 router.get('/', authenticate, authorize(['staff', 'admin']), getOrders);
 router.patch('/:id/status', authenticate, authorize(['staff', 'admin']), updateOrderStatus);

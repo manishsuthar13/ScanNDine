@@ -190,24 +190,54 @@ const Staff = () => {
 
       {/* Orders */}
       <div className="space-y-4">
-        {orders.length === 0 ? (
-  <p className="text-center text-gray-500 py-8">There are no active orders.</p>
-) : (
-  orders.map(order => (
-    <div key={order._id} className="bg-white p-4 rounded-lg shadow-md flex justify-between items-center">
-  <div>
-    <p className="font-bold text-lg">Table {order.tableId?.number || 'N/A'}</p> {/* Made larger */}
-    <p className="text-gray-600">Status: 
-      <span className={order.status === 'placed' ? 'text-red-500' : order.status === 'preparing' ? 'text-yellow-500' : 'text-green-500'}>
-        {order.status}
-      </span>
-    </p>
-  </div>
-  <button onClick={() => setSelectedOrder(order)} className="bg-blue-500 text-white px-4 py-2 rounded">Show</button>
-  <button onClick={() => deleteOrder(order._id)} className="bg-red-500 text-white px-4 py-2 rounded ml-2">Clear</button>
+  {orders.length === 0 ? (
+    <p className="text-center text-gray-500 py-8">There are no active orders.</p>
+  ) : (
+    orders.map(order => (
+      <div 
+        key={order._id} 
+        className="bg-white p-4 rounded-lg shadow-md flex justify-between items-center"
+      >
+        <div>
+          <p className="font-bold text-lg">
+            Table {order.tableId?.number || 'N/A'}
+          </p>
+          <p className="text-gray-600">
+            Status: 
+            <span className={
+              order.status === 'placed'
+                ? 'text-red-500'
+                : order.status === 'preparing'
+                ? 'text-yellow-500'
+                : 'text-green-500'
+            }>
+              {order.status}
+            </span>
+          </p>
+        </div>
+
+        {/* Button group here */}
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setSelectedOrder(order)} 
+            className="bg-blue-500 text-white px-4 py-2 rounded"
+          >
+            Show
+          </button>
+
+          <button 
+            onClick={() => deleteOrder(order._id)} 
+            className="bg-red-500 text-white px-4 py-2 rounded"
+          >
+            Clear
+          </button>
+        </div>
+
+      </div>
+    ))
+  )}
 </div>
-  )))}
-</div>
+
 
 {/* Order Details Modal */}
 {selectedOrder && (

@@ -31,18 +31,40 @@ const Menu = () => {
 
   // Project/ScanNDine/frontend/src/pages/Menu.js - Add/update these functions
 useEffect(() => {
-  // Poll for order updates every 5 seconds
   const fetchOrders = async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tableId = urlParams.get('table');
+    
+    // Prevent polling for guests without a table (avoids 400 error)
+    if (!isLoggedIn && !tableId) return;
+    
     try {
-      // Get table ID from URL if present
-      const urlParams = new URLSearchParams(window.location.search);
-      const tableId = urlParams.get('table');
+      // Attempt token refresh if logged in (handles expiry)
+      if (isLoggedIn) {
+        try {
+          const refreshRes = await api.refresh({ refreshToken: localStorage.getItem('refreshToken') });
+          if (refreshRes?.data?.accessToken) {
+            localStorage.setItem('token', refreshRes.data.accessToken);
+          }
+        } catch (refreshErr) {
+          console.error('Token refresh failed during polling:', refreshErr);
+          // If refresh fails, stop polling and redirect to login
+          if (isLoggedIn) {
+            setIsLoggedIn(false);
+            localStorage.removeItem('token');
+            localStorage.removeItem('refreshToken');
+            window.location.href = '/';
+          }
+          return;
+        }
+      }
       
       const config = tableId ? { params: { table: tableId } } : {};
       const res = await api.getCustomerOrders(config);
       setOrders(res.data);
     } catch (err) {
-      console.error('Failed to fetch orders:', err.response?.data || err);
+      console.error('Failed to fetch orders during polling:', err.response?.data || err);
+      // Optional: Show user notification (e.g., setError('Unable to update order status.'))
     }
   };
 
@@ -50,7 +72,7 @@ useEffect(() => {
   const interval = setInterval(fetchOrders, 5000); // Poll every 5 seconds
   
   return () => clearInterval(interval); // Cleanup
-}, []); // Empty deps array - run once on mount
+}, [isLoggedIn]); // Dependency on isLoggedIn to re-run on login/logout
 
 
   useEffect(() => {
@@ -165,15 +187,44 @@ useEffect(() => {
   };
 
   const fetchHistory = async () => {
-    try {
-      const res = await api.getCustomerOrders();
-      setOrders(res.data);
-      setShowHistory(true);
-    } catch (err) {
-  console.error('Fetch history error:', err.response?.data || err);
-  alert(`Failed to load order history: ${err.response?.data?.message || 'Unknown error'}`);
-}
-  };
+  try {
+    // Attempt token refresh if logged in (handles expiry)
+    if (isLoggedIn) {
+      try {
+        const refreshRes = await api.refresh({ refreshToken: localStorage.getItem('refreshToken') });
+        if (refreshRes?.data?.accessToken) {
+          localStorage.setItem('token', refreshRes.data.accessToken);
+        } 
+      } catch (refreshErr) {
+        // If refresh fails, redirect to login
+        setIsLoggedIn(false);
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        window.location.href = '/';
+        return;
+      }
+    }
+
+    console.log('Making getCustomerOrders API call...');
+    const res = await api.getCustomerOrders();
+    console.log('getCustomerOrders response:', res.data);
+    setOrders(res.data);
+    setShowHistory(true);
+  } catch (err) {
+    console.error('Fetch history error:', err.response?.data || err);
+    // If logged in but getting guest error, token is invalid—redirect to login
+    if (isLoggedIn && err.response?.data?.message === 'Table ID is required for guest orders') {
+      console.log('Detected guest error for logged-in user—redirecting due to invalid token');
+      alert('Session expired. Please log in again.');
+      setIsLoggedIn(false);
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      window.location.href = '/';
+    } else {
+      alert(`Failed to load order history: ${err.response?.data?.message || 'Unknown error'}`);
+    }
+  }
+};
 
   const addToCart = (item) => {
     setCart(prev => {
@@ -200,13 +251,15 @@ useEffect(() => {
   if (cart.length === 0) return;
   try {
     const urlParams = new URLSearchParams(window.location.search);
-    const tableId = urlParams.get('table') || 1;  // Dynamic from URL (e.g., ?table=4), default 1
-    if (isNaN(parseInt(tableId))) {
-  alert('Invalid table ID. Please scan a valid QR code.');
-  return;
-}
-const orderData = {
-      tableId: parseInt(tableId),  // Use dynamic tableId
+    const tableSlug = urlParams.get('table') || 'table-1'; // Default to table-1 if none
+    // Parse table slug (e.g., "table-1" -> 1)
+    const tableNumber = tableSlug.startsWith('table-') ? parseInt(tableSlug.split('-')[1]) : parseInt(tableSlug);
+    if (isNaN(tableNumber)) {
+      alert('Invalid table ID. Please scan a valid QR code.');
+      return;
+    }
+    const orderData = {
+      tableId: tableNumber,  // Send number
       items: cart.map(item => ({ menuItemId: item._id, qty: item.qty }))
     };
     const res = await api.placeOrder(orderData);
@@ -219,9 +272,9 @@ const orderData = {
       alert('Order placed and saved to history!');
     }
   } catch (err) {
-  console.error('Place order error:', err.response?.data || err);  // Log for debugging
-  alert(`Failed to place order: ${err.response?.data?.message || 'Unknown error'}`);
-}
+    console.error('Place order error:', err.response?.data || err);
+    alert(`Failed to place order: ${err.response?.data?.message || 'Unknown error'}`);
+  }
 };
 
   const getInitials = (name) => {

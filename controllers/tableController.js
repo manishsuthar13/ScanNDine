@@ -3,7 +3,7 @@ const Table = require('../models/Table');
 // Get all tables (admin)
 const getTables = async (req, res) => {
   try {
-    const tables = await Table.find();
+    const tables = await Table.find(); // Includes qrData
     res.json(tables);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -55,6 +55,10 @@ const generateQR = async (req, res) => {
     const qrUrl = `http://localhost:3000/menu?table=${table.qrSlug}`; // Update to production URL if deploying
     const QRCode = require('qrcode');
     const qrData = await QRCode.toDataURL(qrUrl); // Generates base64 image
+    
+    // Save QR data to DB
+    table.qrData = qrData;
+    await table.save();
     
     res.json({ qrData, qrUrl }); // Send base64 for display/download
   } catch (error) {
