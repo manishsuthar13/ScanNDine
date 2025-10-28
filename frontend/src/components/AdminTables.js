@@ -50,7 +50,7 @@ const AdminTables = () => {
   const showQR = (table) => {
   const qrData = storedQRs[table._id];
   if (qrData) {
-    const baseUrl = process.env.REACT_APP_API_BASE ? process.env.REACT_APP_API_BASE.replace('/api', '') : 'http://localhost:3000'; // Dynamic base
+    const baseUrl = process.env.REACT_APP_BASE_URL || 'http://localhost:3000'; // Use frontend URL
     setQrModal({ qrData, qrUrl: `${baseUrl}/menu?table=${table.qrSlug}`, table });
   } else {
     alert('QR not generated yet. Click Generate QR first.');
