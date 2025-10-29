@@ -51,18 +51,23 @@ const generateQR = async (req, res) => {
   try {
     const table = await Table.findById(id);
     if (!table) return res.status(404).json({ message: 'Table not found' });
-    
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000'; // Use env var or fallback
-    const qrUrl = `${baseUrl}/menu?table=${table.qrSlug}`; // Dynamic URL
+
+    // Normalize base URL and remove trailing slash if present
+    let baseUrl = (process.env.BASE_URL || 'http://localhost:3000').trim();
+    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+
+    const qrUrl = `${baseUrl}/menu?table=${table.qrSlug}`;
     const QRCode = require('qrcode');
     const qrData = await QRCode.toDataURL(qrUrl);
-    
-    // Save QR data to DB
+
+    // Save QR data and qrUrl to DB (overwrite any old qrData)
     table.qrData = qrData;
+    table.qrUrl = qrUrl;   // <-- save the URL as well for easier debugging later
     await table.save();
-    
+
     res.json({ qrData, qrUrl });
   } catch (error) {
+    console.error('generateQR error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
