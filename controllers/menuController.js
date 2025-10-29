@@ -1,5 +1,24 @@
 const MenuCategory = require('../models/MenuCategory');
 const MenuItem = require('../models/MenuItem');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const multer = require('multer'); // Ensure multer is imported
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'scanndine-uploads', // Folder in Cloudinary
+    allowed_formats: ['jpg', 'png', 'jpeg', 'webp'],
+  },
+});
+
+const upload = multer({ storage });
 
 const getCategories = async (req, res) => {
   try {
@@ -33,7 +52,7 @@ const createCategory = async (req, res) => {
 const createItem = async (req, res) => {
   try {
     const { name, description, price, categoryId, availability } = req.body;
-    const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    const imageUrl = req.file ? req.file.path : null; // Cloudinary URL (e.g., https://res.cloudinary.com/.../image.jpg)
     const item = new MenuItem({
       name,
       description,
@@ -62,7 +81,7 @@ const updateItem = async (req, res) => {
         price: parseFloat(req.body.price),
         categoryId: req.body.categoryId,
         availability: req.body.availability === 'true',
-        imageUrl: `/uploads/${req.file.filename}`
+        imageUrl: req.file.path // Cloudinary URL
       };
     } else {
       // JSON case (for toggle)
@@ -76,10 +95,18 @@ const updateItem = async (req, res) => {
   }
 };
 
-
 const deleteItem = async (req, res) => {
   const { id } = req.params;
   try {
+    const item = await MenuItem.findById(id);
+    if (!item) return res.status(404).json({ message: 'Item not found' });
+    
+    // Optional: Delete image from Cloudinary (uncomment to enable)
+    if (item.imageUrl) {
+      const publicId = item.imageUrl.split('/').pop().split('.')[0];
+      await cloudinary.uploader.destroy(`scanndine-uploads/${publicId}`);
+    }
+    
     await MenuItem.findByIdAndDelete(id);
     res.json({ message: 'Item deleted' });
   } catch (error) {
