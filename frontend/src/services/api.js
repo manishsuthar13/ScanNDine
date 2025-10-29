@@ -1,11 +1,14 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = process.env.REACT_APP_API_BASE
+  ? `${process.env.REACT_APP_API_BASE}/api`
+  : 'http://localhost:5000/api';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
+
 
 export const api = {
   generateQR: (id) => axios.get(`${API_BASE}/tables/${id}/qr`, { headers: getAuthHeaders() }),
