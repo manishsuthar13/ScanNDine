@@ -64,9 +64,11 @@ const createItem = async (req, res) => {
     await item.save();
     res.status(201).json(item);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
+  console.error("🔥 SERVER ERROR:", error.message);
+  console.error("📌 Full Error:", error);
+  return res.status(500).json({ error: error.message });
+}
+
 };
 
 const updateItem = async (req, res) => {
@@ -91,8 +93,11 @@ const updateItem = async (req, res) => {
     const item = await MenuItem.findByIdAndUpdate(id, updateData, { new: true });
     res.json(item);
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
+  console.error("🔥 SERVER ERROR:", error.message);
+  console.error("📌 Full Error:", error);
+  return res.status(500).json({ error: error.message });
+}
+
 };
 
 const deleteItem = async (req, res) => {
@@ -114,4 +119,4 @@ const deleteItem = async (req, res) => {
   }
 };
 
-module.exports = { getCategories, getItems, createCategory, createItem, updateItem, deleteItem };
+module.exports = { getCategories, getItems, createCategory, createItem, updateItem, deleteItem, upload };

@@ -1,22 +1,31 @@
 const express = require('express');
-const multer = require('multer');  // Added for image uploads
-const { getCategories, getItems, createCategory, createItem, updateItem, deleteItem } = require('../controllers/menuController');
+const { 
+  getCategories, 
+  getItems, 
+  createCategory, 
+  createItem, 
+  updateItem, 
+  deleteItem, 
+  upload // ✅ get cloudinary upload from controller
+} = require('../controllers/menuController');
+
 const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Multer setup for image uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),  // Save to uploads folder
-  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
-});
-const upload = multer({ storage });
-
 router.get('/categories', getCategories);
 router.get('/items', getItems);
+
+// Category
 router.post('/categories', authenticate, authorize(['admin']), createCategory);
-router.post('/items', authenticate, authorize(['admin']), upload.single('image'), createItem);  // Added upload.single('image')
-router.put('/items/:id', authenticate, authorize(['admin']), updateItem);
+
+// Item (use Cloudinary)
+router.post('/items', authenticate, authorize(['admin']), upload.single('image'), createItem);
+
+// Update item (also allow image upload)
+router.put('/items/:id', authenticate, authorize(['admin']), upload.single('image'), updateItem);
+
+// Delete
 router.delete('/items/:id', authenticate, authorize(['admin']), deleteItem);
 
 module.exports = router;
