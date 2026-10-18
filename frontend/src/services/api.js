@@ -1,55 +1,96 @@
 import axios from 'axios';
+import { clearSession, getToken, getRefreshToken, setToken } from './session';
 
-const API_BASE = process.env.REACT_APP_API_BASE
-  ? `${process.env.REACT_APP_API_BASE}/api`
-  : 'http://localhost:5000/api';
+const API_BASE = `${process.env.REACT_APP_API_BASE || 'http://localhost:5000'}/api/v1`;
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
+const http = axios.create({ baseURL: API_BASE });
+// Customers never log in, so public calls carry no credentials
+const publicHttp = axios.create({ baseURL: `${API_BASE}/public` });
 
+http.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
-export const api = {
-  generateQR: (id) => axios.get(`${API_BASE}/tables/${id}/qr`, { headers: getAuthHeaders() }),
-  getMenuCategories: () => axios.get(`${API_BASE}/menu/categories`, { headers: getAuthHeaders() }),
-  createCategory: (data) => axios.post(`${API_BASE}/menu/categories`, data, { headers: getAuthHeaders() }),
-  getMenuItems: () => axios.get(`${API_BASE}/menu/items`, { headers: getAuthHeaders() }),
-  createItem: (data) => axios.post(`${API_BASE}/menu/items`, data, { headers: {...getAuthHeaders(), 'Content-Type': 'multipart/form-data'}}),
-  updateItem: (id, data) => axios.put(`${API_BASE}/menu/items/${id}`, data, { headers:{ ...getAuthHeaders(), 'Content-Type': 'multipart/form-data' }}),
-  deleteItem: (id) => axios.delete(`${API_BASE}/menu/items/${id}`, { headers: getAuthHeaders() }),
-  getOrders: () => axios.get(`${API_BASE}/orders`, { headers: getAuthHeaders() }),
-  deleteOrder: (id) => axios.delete(`${API_BASE}/orders/${id}`, { headers: getAuthHeaders() }),
-  updateOrderStatus: (id, data) => axios.patch(`${API_BASE}/orders/${id}/status`, data, { headers: getAuthHeaders() }),
-  getAnalytics: () => axios.get(`${API_BASE}/orders/analytics`, { headers: getAuthHeaders() }),
-  getTables: () => axios.get(`${API_BASE}/tables`, { headers: getAuthHeaders() }),
-  createTable: (data) => axios.post(`${API_BASE}/tables`, data, { headers: getAuthHeaders() }),
-  deleteTable: (id) => axios.delete(`${API_BASE}/tables/${id}`, { headers: getAuthHeaders() }),
-  register: (data) => axios.post(`${API_BASE}/auth/register`, data),
-  login: (data) => axios.post(`${API_BASE}/auth/login`, data),
-  logout: () => axios.post(`${API_BASE}/auth/logout`, {}, { headers: getAuthHeaders() }),
-  refresh: (data) => axios.post(`${API_BASE}/auth/refresh`, data),
-  checkAdminExists: () => axios.get(`${API_BASE}/auth/check-admin`),
-  getPendingStaff: () => axios.get(`${API_BASE}/auth/pending-staff`, { headers: getAuthHeaders() }),
-  approveStaff: (id) => axios.patch(`${API_BASE}/auth/approve-staff/${id}`, {}, { headers: getAuthHeaders() }),
-  rejectStaff: (id) => axios.delete(`${API_BASE}/auth/reject-staff/${id}`, { headers: getAuthHeaders() }),
-  addStaff: (data) => axios.post(`${API_BASE}/auth/add-staff`, data, { headers: getAuthHeaders() }),
-  removeStaff: (id) => axios.delete(`${API_BASE}/auth/remove-staff/${id}`, { headers: getAuthHeaders() }),
-  getOrderById: (id) => axios.get(`${API_BASE}/orders/${id}`),
-  placeOrder: (data) => axios.post(`${API_BASE}/orders`, data, { headers: getAuthHeaders() }),
-  getStaffDetails: () => axios.get(`${API_BASE}/auth/staff-details`, { headers: getAuthHeaders() }),
-  getAllStaff: () => axios.get(`${API_BASE}/auth/all-staff`, { headers: getAuthHeaders() }),
-  updateStaffDetails: (data) => axios.put(`${API_BASE}/auth/update-details`, data, { headers: getAuthHeaders() }),
-  sendQuery: (data) => axios.post(`${API_BASE}/auth/queries`, data, {headers: getAuthHeaders()}),
-  getQueries: () => axios.get(`${API_BASE}/auth/queries`, {headers: getAuthHeaders()}),
-  deleteQuery: (id) => axios.delete(`${API_BASE}/auth/queries/${id}`, { headers: getAuthHeaders() }),  // Added for clearing individual queries
-  getCustomerOrders: (config = {}) => axios.get(`${API_BASE}/orders/me`, { 
-  headers: getAuthHeaders(),
-  ...config,
-  params: {
-    ...config.params,
-    timestamp: Date.now() // Add cache-busting
+// On an expired access token, refresh once (shared across concurrent requests) and retry
+let refreshing = null;
+http.interceptors.response.use(
+  (res) => res,
+  async (error) => {
+    const { config, response } = error;
+    const isAuthCall = /^\/auth\/(login|refresh|signup|forgot-password|reset-password)/.test(config?.url || '');
+    if (response?.status !== 401 || !config || config._retried || isAuthCall || !getRefreshToken()) {
+      return Promise.reject(error);
+    }
+    config._retried = true;
+    try {
+      refreshing = refreshing || axios
+        .post(`${API_BASE}/auth/refresh`, { refreshToken: getRefreshToken() })
+        .then((r) => r.data.accessToken)
+        .finally(() => { refreshing = null; });
+      const token = await refreshing;
+      setToken(token);
+      config.headers.Authorization = `Bearer ${token}`;
+      return http(config);
+    } catch (refreshError) {
+      clearSession();
+      window.location.href = '/';
+      return Promise.reject(error);
+    }
   }
-})
+);
 
+// List endpoints take { page, limit } and return { data, pagination }
+export const api = {
+  // auth
+  login: (data) => http.post('/auth/login', data),
+  signup: (data) => http.post('/auth/signup', data),
+  forgotPassword: (data) => http.post('/auth/forgot-password', data),
+  resetPassword: (data) => http.post('/auth/reset-password', data),
+  logout: () => http.post('/auth/logout').catch(() => {}),
+  getMe: () => http.get('/auth/me'),
+  updateMe: (data) => http.put('/auth/me', data),
+  changePassword: (data) => http.put('/auth/password', data),
+  sendQuery: (data) => http.post('/auth/queries', data),
+  getQueries: (params) => http.get('/auth/queries', { params }),
+  deleteQuery: (id) => http.delete(`/auth/queries/${id}`),
+
+  // superadmin
+  getSuperadminOverview: () => http.get('/superadmin/overview'),
+  getRestaurants: (params) => http.get('/superadmin/restaurants', { params }),
+  getRestaurantDetail: (id) => http.get(`/superadmin/restaurants/${id}`),
+  createAdminAsSuperadmin: (data) => http.post('/superadmin/admins', data),
+
+  // admin: team
+  getStaff: (params) => http.get('/admin/staff', { params }),
+  addStaff: (data) => http.post('/admin/staff', data),
+  removeStaff: (id) => http.delete(`/admin/staff/${id}`),
+  getAdmins: (params) => http.get('/admin/admins', { params }),
+  addAdmin: (data) => http.post('/admin/admins', data),
+  removeAdmin: (id) => http.delete(`/admin/admins/${id}`),
+
+  // admin: menu and tables
+  getMenuCategories: (params) => http.get('/menu/categories', { params }),
+  createCategory: (data) => http.post('/menu/categories', data),
+  getMenuItems: (params) => http.get('/menu/items', { params }),
+  createItem: (data) => http.post('/menu/items', data),
+  updateItem: (id, data) => http.put(`/menu/items/${id}`, data),
+  deleteItem: (id) => http.delete(`/menu/items/${id}`),
+  getTables: (params) => http.get('/tables', { params }),
+  createTable: (data) => http.post('/tables', data),
+  deleteTable: (id) => http.delete(`/tables/${id}`),
+  generateQR: (id) => http.get(`/tables/${id}/qr`),
+
+  // staff and admin: orders
+  getOrders: (params) => http.get('/orders', { params }),
+  deleteOrder: (id) => http.delete(`/orders/${id}`),
+  updateOrderStatus: (id, data) => http.patch(`/orders/${id}/status`, data),
+  getAnalytics: () => http.get('/orders/analytics'),
+
+  // customers (public, via the QR code)
+  getPublicMenu: (restaurantId) => publicHttp.get(`/restaurants/${restaurantId}/menu`),
+  placeOrder: (restaurantId, data) => publicHttp.post(`/restaurants/${restaurantId}/orders`, data),
+  getTableOrders: (restaurantId, table) =>
+    publicHttp.get(`/restaurants/${restaurantId}/orders`, { params: { table, t: Date.now() } }),
 };

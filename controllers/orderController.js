@@ -1,66 +1,46 @@
 const Order = require('../models/Order');
-const MenuItem = require('../models/MenuItem');
+const { isId } = require('../utils/validation');
+const { paginate } = require('../utils/pagination');
 
-const placeOrder = async (req, res) => {
-  const { tableId, items } = req.body;
-  try {
-    // Find the table by number to get its ObjectId
-    const Table = require('../models/Table');
-    const table = await Table.findOne({ number: parseInt(tableId) });
-    if (!table) {
-      return res.status(400).json({ message: 'Table not found' });
-    }
-    let total = 0;
-    for (let item of items) {
-      const menuItem = await MenuItem.findById(item.menuItemId);
-      if (!menuItem) {
-        return res.status(400).json({ message: `Menu item ${item.menuItemId} not found` });
-      }
-      total += menuItem.price * item.qty;
-    }
-    const order = new Order({ tableId: table._id, items, totals: total, userId: req.user ? req.user._id : null });
-    await order.save();
-    res.status(201).json(order);
-  } catch (error) {
-    console.error('placeOrder error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
+const STATUSES = ['placed', 'preparing', 'ready', 'served', 'canceled'];
 
-// Get orders (staff)
+// Get orders (staff/admin of the restaurant)
 const getOrders = async (req, res) => {
   const { status, table } = req.query;
   try {
-    let query = {};
+    const query = { restaurantId: req.user.restaurantId, status: { $ne: 'cleared' } };
     if (status) query.status = status;
-    if (table) query.tableId = table;
-    const orders = await Order.find(query).populate('tableId', 'number').populate('items.menuItemId', 'name price');
-    // Filter out cleared orders for staff view
-    const activeOrders = orders.filter(order => order.status !== 'cleared');
-    res.json(activeOrders);
+    if (table && isId(table)) query.tableId = table;
+    res.json(await paginate(Order, query, req.query, (q) => q
+      .populate('tableId', 'number')
+      .populate('items.menuItemId', 'name price')
+      .sort({ createdAt: -1 })));
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// Update order status (staff)
+// Update order status (staff/admin)
 const updateOrderStatus = async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
+  if (!isId(id)) return res.status(400).json({ message: 'Invalid id' });
+  if (!STATUSES.includes(status)) return res.status(400).json({ message: 'Invalid status' });
   try {
-    const order = await Order.findByIdAndUpdate(id, { status }, { new: true });
+    const order = await Order.findOneAndUpdate({ _id: id, restaurantId: req.user.restaurantId }, { status }, { new: true });
+    if (!order) return res.status(404).json({ message: 'Order not found' });
     res.json(order);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-
 // Clear order (staff) - sets status to 'cleared' instead of deleting
 const deleteOrder = async (req, res) => {
   const { id } = req.params;
+  if (!isId(id)) return res.status(400).json({ message: 'Invalid id' });
   try {
-    const order = await Order.findByIdAndUpdate(id, { status: 'cleared' }, { new: true });
+    const order = await Order.findOneAndUpdate({ _id: id, restaurantId: req.user.restaurantId }, { status: 'cleared' }, { new: true });
     if (!order) return res.status(404).json({ message: 'Order not found' });
     res.json({ message: 'Order cleared', order });
   } catch (error) {
@@ -68,73 +48,37 @@ const deleteOrder = async (req, res) => {
   }
 };
 
-const getCustomerOrders = async (req, res) => {
- try {
-    let query = {};
-    
-    // For logged-in customers, filter by userId
-    if (req.user && req.user.role === 'customer') {
-      query.userId = req.user._id;
-    } else {
-      // For guests, require tableId query param
-      const tableId = req.query.table;
-      if (!tableId) {
-        return res.status(400).json({ message: 'Table ID is required for guest orders' });
-      }
-      // Parse table slug (e.g., "table-1" -> 1)
-      const number = tableId.startsWith('table-') ? parseInt(tableId.split('-')[1]) : parseInt(tableId);
-      if (isNaN(number)) {
-        return res.status(400).json({ message: 'Invalid table ID' });
-      }
-      // Find table by number
-      const Table = require('../models/Table');
-      const table = await Table.findOne({ number });
-      if (!table) {
-        return res.status(400).json({ message: 'Table not found' });
-      }
-      query.tableId = table._id;
-    }
-
-    const orders = await Order.find(query)
-      .populate('tableId', 'number')
-      .populate('items.menuItemId', 'name price')
-      .sort({ createdAt: -1 });
-
-    res.json(orders); // Show all orders, including 'cleared'
-  } catch (error) {
-    console.error('getCustomerOrders error:', error);
-    res.status(500).json({ message: 'Failed to fetch orders' });
-  }
-};
-
-// Get analytics (admin/staff)
+// Get analytics (admin/staff), canceled orders excluded
 const getAnalytics = async (req, res) => {
   try {
-    const totalOrders = await Order.countDocuments();
-    const totalRevenue = await Order.aggregate([{ $group: { _id: null, total: { $sum: '$totals' } } }]);
-    
-    // Aggregate item counts from all orders
-    const itemBreakdown = await Order.aggregate([
-      { $unwind: '$items' },  // Unwind items array
-      { $group: { _id: '$items.menuItemId', count: { $sum: '$items.qty' } } },  // Count total qty per item
-      { $lookup: { from: 'menuitems', localField: '_id', foreignField: '_id', as: 'item' } },  // Join with MenuItem
-      { $unwind: '$item' },
-      { $lookup: { from: 'menucategories', localField: 'item.categoryId', foreignField: '_id', as: 'category' } },  // Join with MenuCategory
-      { $unwind: '$category' },
-      { $project: { 
-        name: '$item.name', 
-        description: '$item.description', 
-        imageUrl: '$item.imageUrl', 
-        categoryName: '$category.name', 
-        count: 1 
-      } },
-      { $sort: { count: -1 } }  // Sort by count descending
+    const match = { restaurantId: req.user.restaurantId, status: { $ne: 'canceled' } };
+    const [totals] = await Order.aggregate([
+      { $match: match },
+      { $group: { _id: null, orders: { $sum: 1 }, revenue: { $sum: '$totals' } } },
     ]);
-    
-    res.json({ totalOrders, totalRevenue: totalRevenue[0]?.total || 0, itemBreakdown });
+
+    const itemBreakdown = await Order.aggregate([
+      { $match: match },
+      { $unwind: '$items' },
+      { $group: { _id: '$items.menuItemId', count: { $sum: '$items.qty' } } },
+      { $lookup: { from: 'menuitems', localField: '_id', foreignField: '_id', as: 'item' } },
+      { $unwind: '$item' },
+      { $lookup: { from: 'menucategories', localField: 'item.categoryId', foreignField: '_id', as: 'category' } },
+      { $unwind: '$category' },
+      { $project: {
+        name: '$item.name',
+        description: '$item.description',
+        imageUrl: '$item.imageUrl',
+        categoryName: '$category.name',
+        count: 1,
+      } },
+      { $sort: { count: -1 } },
+    ]);
+
+    res.json({ totalOrders: totals?.orders || 0, totalRevenue: totals?.revenue || 0, itemBreakdown });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-module.exports = { placeOrder, getOrders, updateOrderStatus, deleteOrder, getCustomerOrders, getAnalytics };
+module.exports = { getOrders, updateOrderStatus, deleteOrder, getAnalytics };

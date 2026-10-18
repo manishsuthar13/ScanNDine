@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
-const { getTables, createTable, deleteTable, getTableBySlug, generateQR } = require('../controllers/tableController');
+const { getTables, createTable, deleteTable, generateQR } = require('../controllers/tableController');
 const router = express.Router();
 
 // Get all tables
@@ -11,9 +11,6 @@ router.post('/', authenticate, authorize(['admin']), createTable);
 
 // Delete table
 router.delete('/:id', authenticate, authorize(['admin']), deleteTable);
-
-// Get table by slug (public)
-router.get('/slug/:slug', getTableBySlug);
 
 router.get('/:id/qr', authenticate, authorize(['admin']), generateQR);
 

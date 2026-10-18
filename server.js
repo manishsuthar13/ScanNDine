@@ -1,32 +1,10 @@
 require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
 const connectDB = require('./config/database');
+const seedSuperadmin = require('./config/seed');
+const app = require('./app');
+const logger = require('./utils/logger');
 
-const app = express();
-
-// Connect to DB
-connectDB();
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-app.use('/uploads', express.static('uploads'));  // Serve uploaded images
-// Routes
-const authRoutes = require('./routes/auth');
-app.use('/api/auth', authRoutes);
-
-const menuRoutes = require('./routes/menu');
-const tableRoutes = require('./routes/table');
-const orderRoutes = require('./routes/order');
-
-app.use('/api/menu', menuRoutes);
-app.use('/api/tables', tableRoutes);
-app.use('/api/orders', orderRoutes);
-
-// Basic route for testing
-app.get('/', (req, res) => res.json({ message: 'Restaurant QR Menu API is running!' }));
+connectDB().then(seedSuperadmin);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => logger.info(`Server running on port ${PORT}`));

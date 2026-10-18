@@ -1,10 +1,12 @@
 const Table = require('../models/Table');
+const { isId, handleDuplicate } = require('../utils/validation');
+const { paginate } = require('../utils/pagination');
 
 // Get all tables (admin)
 const getTables = async (req, res) => {
   try {
-    const tables = await Table.find(); // Includes qrData
-    res.json(tables);
+    // Includes qrData
+    res.json(await paginate(Table, { restaurantId: req.user.restaurantId }, req.query, (q) => q.sort({ number: 1 })));
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
@@ -12,13 +14,15 @@ const getTables = async (req, res) => {
 
 // Create table (admin)
 const createTable = async (req, res) => {
-  const { number } = req.body;
+  const number = parseInt(req.body.number, 10);
+  if (!Number.isInteger(number) || number < 1) return res.status(400).json({ message: 'Enter a valid table number' });
   try {
     const qrSlug = `table-${number}`;
-    const table = new Table({ number, qrSlug });
+    const table = new Table({ restaurantId: req.user.restaurantId, number, qrSlug });
     await table.save();
     res.status(201).json(table);
   } catch (error) {
+    if (handleDuplicate(error, res)) return;
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -26,20 +30,9 @@ const createTable = async (req, res) => {
 // Delete table (admin)
 const deleteTable = async (req, res) => {
   try {
-    await Table.findByIdAndDelete(req.params.id);
+    if (!isId(req.params.id)) return res.status(400).json({ message: 'Invalid id' });
+    await Table.findOneAndDelete({ _id: req.params.id, restaurantId: req.user.restaurantId });
     res.json({ message: 'Table deleted' });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// Get table by slug (public, for QR)
-const getTableBySlug = async (req, res) => {
-  const { slug } = req.params;
-  try {
-    const table = await Table.findOne({ qrSlug: slug });
-    if (!table) return res.status(404).json({ message: 'Table not found' });
-    res.json(table);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
@@ -49,14 +42,15 @@ const getTableBySlug = async (req, res) => {
 const generateQR = async (req, res) => {
   const { id } = req.params;
   try {
-    const table = await Table.findById(id);
+    if (!isId(id)) return res.status(400).json({ message: 'Invalid id' });
+    const table = await Table.findOne({ _id: id, restaurantId: req.user.restaurantId });
     if (!table) return res.status(404).json({ message: 'Table not found' });
 
     // Normalize base URL and remove trailing slash if present
     let baseUrl = (process.env.BASE_URL || 'http://localhost:3000').trim();
     if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
 
-    const qrUrl = `${baseUrl}/menu?table=${table.qrSlug}`;
+    const qrUrl = `${baseUrl}/menu?r=${table.restaurantId}&table=${table.qrSlug}`;
     const QRCode = require('qrcode');
     const qrData = await QRCode.toDataURL(qrUrl);
 
@@ -72,4 +66,4 @@ const generateQR = async (req, res) => {
   }
 };
 
-module.exports = { getTables, createTable, deleteTable, getTableBySlug, generateQR };
+module.exports = { getTables, createTable, deleteTable, generateQR };

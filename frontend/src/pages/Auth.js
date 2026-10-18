@@ -1,63 +1,50 @@
-import React, { useState } from 'react';
-import { api } from '../services/api';
-import {useNavigate} from 'react-router-dom';
+import React from 'react';
+import { Link, Navigate } from 'react-router-dom';
+import AuthLayout from '../components/auth/AuthLayout';
+import { Button, TextField, Alert } from '../components/ui';
+import { useLoginForm } from '../hooks/useAuthForms';
+import { detectIdentifierType } from '../utils/validators';
+import { getUser, homeFor } from '../services/session';
+import { TEXT } from '../constants/text';
 
-const Auth = () => {
-  const navigate = useNavigate();
-  const [mode, setMode] = useState('login'); // 'login' or 'signup'
-  const [role, setRole] = useState('customer'); // For signup only
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
-  const [error, setError] = useState('');
+const T = TEXT.auth.login;
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      if (mode === 'login') {
-        const res = await api.login({ email: form.email, password: form.password });  // Auto-detect role
-        localStorage.setItem('token', res.data.accessToken);
-        localStorage.setItem('refreshToken', res.data.refreshToken);
-        // Decode token to get role
-        const decoded = JSON.parse(atob(res.data.accessToken.split('.')[1]));
-        const userRole = decoded.role;
-        navigate(userRole === 'admin' ? '/admin' : userRole === 'staff' ? '/staff' : '/menu');
-      } else {
-        await api.register({ ...form, role });  // Send selected role for signup
-        alert('Registered! Please login.');
-        setMode('login');
-      }
-    } catch (err) {
-      setError(err.response?.data?.message || 'Error occurred');
-    }
-  };
+// One field takes an email or a username - the type is detected from what's typed
+const LoginForm = () => {
+  const { form, remember, setRemember, submit, loading, error } = useLoginForm();
+  const kind = detectIdentifierType(form.values.identifier);
+  const hint = kind === 'email' ? T.hintEmail : kind === 'username' ? T.hintUsername : undefined;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-100 to-green-100 flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
-        <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">🍽️ Scan & Dine</h1>
-        <div className="flex mb-6">
-          <button onClick={() => setMode('login')} className={`flex-1 py-2 ${mode === 'login' ? 'bg-orange-500 text-white' : 'bg-gray-200'}`}>Login</button>
-          <button onClick={() => setMode('signup')} className={`flex-1 py-2 ${mode === 'signup' ? 'bg-orange-500 text-white' : 'bg-gray-200'}`}>Signup</button>
+    <AuthLayout
+      title={T.title}
+      subtitle={T.subtitle}
+      footer={<>{T.noAccount} <Link to="/signup" className="font-semibold text-primary">{T.signupLink}</Link></>}
+    >
+      <form onSubmit={submit} noValidate>
+        <TextField label={T.identifierLabel} placeholder={T.identifierPlaceholder} autoComplete="username" autoCapitalize="none" hint={hint} {...form.bind('identifier')} />
+        <TextField label={T.passwordLabel} type="password" placeholder={T.passwordPlaceholder} autoComplete="current-password" {...form.bind('password')} />
+
+        <div className="mb-5 flex items-center justify-between text-sm">
+          <label className="flex cursor-pointer items-center gap-2 text-ink/70">
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 rounded accent-primary" />
+            {T.remember}
+          </label>
+          <Link to="/forgot-password" className="font-medium text-primary">{T.forgot}</Link>
         </div>
-        {mode === 'signup' && (
-          <div className="mb-4">
-            <button onClick={() => setRole('customer')} className={`mr-2 px-4 py-2 rounded ${role === 'customer' ? 'bg-orange-500 text-white' : 'bg-gray-200'}`}>Customer</button>
-            <button onClick={() => setRole('staff')} className={`mr-2 px-4 py-2 rounded ${role === 'staff' ? 'bg-orange-500 text-white' : 'bg-gray-200'}`}>Staff</button>
-            <button onClick={() => setRole('admin')} className={`px-4 py-2 rounded ${role === 'admin' ? 'bg-orange-500 text-white' : 'bg-gray-200'}`}>Admin</button>
-          </div>
-        )}
-        <form onSubmit={handleSubmit}>
-          {mode === 'signup' && (
-            <input type="text" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full p-3 border rounded mb-4" required />
-          )}
-          <input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full p-3 border rounded mb-4" required />
-          <input type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full p-3 border rounded mb-4" required />
-          {error && <p className="text-red-500 mb-4">{error}</p>}
-          <button type="submit" className="w-full bg-green-500 text-white py-3 rounded hover:bg-green-600">{mode === 'login' ? 'Login' : 'Signup'}</button>
-        </form>
-        {mode === 'login' && <button onClick={() => navigate('/menu')} className="w-full bg-blue-500 text-white py-3 rounded mt-4 hover:bg-blue-600">Continue as Guest</button>}
-      </div>
-    </div>
+
+        <Alert>{error}</Alert>
+        <Button type="submit" size="lg" fullWidth loading={loading}>{loading ? TEXT.common.loading : T.submit}</Button>
+      </form>
+      <p className="mt-5 text-center text-xs text-ink/50">{T.staffNote}</p>
+    </AuthLayout>
   );
+};
+
+const Auth = () => {
+  const existing = getUser();
+  if (existing) return <Navigate to={homeFor(existing.role)} replace />;
+  return <LoginForm />;
 };
 
 export default Auth;

@@ -1,3 +1,26 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Global theme - the single place colours are defined.
+ * Values are space-separated RGB so Tailwind opacity modifiers work (bg-primary/10).
+ * Components use the semantic tokens from tailwind.config.js and never raw hex values.
+ */
+:root {
+  --color-primary: 229 57 53;       /* #E53935 */
+  --color-primary-dark: 198 40 40;  /* #C62828 - hover/pressed */
+  --color-accent: 255 112 67;       /* #FF7043 */
+  --color-canvas: 255 248 242;      /* #FFF8F2 - page background */
+  --color-ink: 37 37 37;            /* #252525 - text */
+  --color-surface: 255 255 255;     /* cards and inputs */
+  --color-success: 46 125 50;       /* positive states (ready, saved) */
+}
+
+@layer base {
+  html { font-family: theme('fontFamily.sans'); }
+  body { @apply bg-canvas text-ink antialiased; }
+  h1, h2, h3, h4, h5, h6 { @apply font-display; }
+  /* Visible keyboard focus everywhere */
+  :focus-visible { @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-canvas; }
+}

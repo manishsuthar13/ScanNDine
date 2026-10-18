@@ -1,106 +1,58 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../services/api';
+import React from 'react';
+import { useAdminTables } from '../hooks/useAdminTables';
+import { Card, Button, Modal, Alert, Pagination, Spinner } from './ui';
+import { TEXT } from '../constants/text';
 
-const AdminTables = () => {
-  const [tables, setTables] = useState([]);
-  const [qrModal, setQrModal] = useState(null); // For displaying QR
-  const [storedQRs, setStoredQRs] = useState({}); // Store QR data by table ID
+const T = TEXT.admin.tables;
 
-  useEffect(() => {
-    loadTables();
-  }, []);
+const TableRow = React.memo(({ table, busy, onGenerate, onShow, onDelete }) => (
+  <li className="flex flex-col gap-2 border-b border-ink/10 py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+    <span>
+      <span className="font-semibold">{T.table(table.number)}</span>
+      <span className="ml-2 text-sm text-ink/50">{T.slug}: {table.qrSlug}</span>
+    </span>
+    <span className="flex flex-wrap gap-2">
+      <Button size="sm" variant="accent" loading={busy} onClick={() => onGenerate(table)}>{T.generate}</Button>
+      <Button size="sm" variant="outline" onClick={() => onShow(table)}>{T.show}</Button>
+      <Button size="sm" variant="soft" onClick={() => onDelete(table)}>{T.delete}</Button>
+    </span>
+  </li>
+));
 
-  const loadTables = () => {
-    api.getTables().then(res => {
-      setTables(res.data);
-      // Load stored QR data from DB
-      const qrMap = {};
-      res.data.forEach(table => {
-        if (table.qrData) qrMap[table._id] = table.qrData;
-      });
-      setStoredQRs(qrMap);
-    });
-  };
-
-  const addTable = () => {
-    const newTableNumber = prompt('Enter table number:');
-    if (newTableNumber) {
-      api.createTable({ number: parseInt(newTableNumber) }).then(() => loadTables());
-    }
-  };
-
-  const deleteTable = (id) => {
-    api.deleteTable(id).then(() => {
-      setStoredQRs(prev => {
-        const updated = { ...prev };
-        delete updated[id]; // Remove stored QR
-        return updated;
-      });
-      loadTables();
-    });
-  };
-
-  const generateQR = (table) => {
-    api.generateQR(table._id).then(res => {
-      setStoredQRs(prev => ({ ...prev, [table._id]: res.data.qrData })); // Store QR
-      setQrModal({ qrData: res.data.qrData, qrUrl: res.data.qrUrl, table });
-    }).catch(err => alert('Failed to generate QR'));
-  };
-
-  const showQR = (table) => {
-  const qrData = storedQRs[table._id];
-  if (qrData) {
-    const baseUrl = process.env.REACT_APP_BASE_URL || 'http://localhost:3000'; // Use frontend URL
-    setQrModal({ qrData, qrUrl: `${baseUrl}/menu?table=${table.qrSlug}`, table });
-  } else {
-    alert('QR not generated yet. Click Generate QR first.');
-  }
+const downloadQr = ({ qrData, table }) => {
+  const link = document.createElement('a');
+  link.href = qrData;
+  link.download = `QR_Table_${table.number}.png`;
+  link.click();
 };
 
-  const downloadQR = () => {
-    if (!qrModal) return;
-    const link = document.createElement('a');
-    link.href = qrModal.qrData;
-    link.download = `QR_Table_${qrModal.table.number}.png`;
-    link.click();
-  };
+const AdminTables = () => {
+  const { tables, qr, closeQr, error, busyId, addTable, deleteTable, generate, show } = useAdminTables();
 
   return (
-    <div>
-      <h2 className="text-2xl font-bold mb-4">Table - QR Management</h2>
-      <div className="mb-6">
-        <h3 className="text-xl font-semibold mb-2">Add Table</h3>
-        <button onClick={addTable} className="bg-orange-500 text-white px-4 py-2 rounded">Add Table</button>
-      </div>
-      <div>
-        <h3 className="text-xl font-semibold mb-2">Tables</h3>
-        <ul>
-          {tables.map(table => (
-            <li key={table._id} className="flex justify-between items-center border-b py-2">
-              <span>Table {table.number} - QR Slug: {table.qrSlug}</span>
-              <div>
-                <button onClick={() => generateQR(table)} className="bg-blue-500 text-white px-2 py-1 rounded mr-2">Generate QR</button>
-                <button onClick={() => showQR(table)} className="bg-green-500 text-white px-2 py-1 rounded mr-2">Show</button>
-                <button onClick={() => deleteTable(table._id)} className="bg-red-500 text-white px-2 py-1 rounded">Delete</button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
+    <>
+      <h2 className="mb-4 text-2xl font-extrabold">{T.title}</h2>
+      <Card title={T.listTitle} action={<Button onClick={addTable}>{T.addTable}</Button>}>
+        <Alert>{error || tables.error}</Alert>
+        {tables.loading && tables.items.length === 0 ? <Spinner /> : (
+          <ul>
+            {tables.items.length === 0 && <li className="text-ink/60">{T.empty}</li>}
+            {tables.items.map((t) => (
+              <TableRow key={t._id} table={t} busy={busyId === t._id} onGenerate={generate} onShow={show} onDelete={deleteTable} />
+            ))}
+          </ul>
+        )}
+        <Pagination pagination={tables.pagination} onPage={tables.setPage} disabled={tables.loading} />
+      </Card>
 
-      {/* QR Modal */}
-      {qrModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-96">
-            <h3 className="text-xl font-bold mb-4">QR Code for Table {qrModal.table.number}</h3>
-            <img src={qrModal.qrData} alt="QR Code" className="w-full mb-4" />
-            <p className="text-sm mb-4">URL: {qrModal.qrUrl}</p>
-            <button onClick={downloadQR} className="bg-green-500 text-white px-4 py-2 rounded mr-2">Download</button>
-            <button onClick={() => setQrModal(null)} className="bg-gray-500 text-white px-4 py-2 rounded">Close</button>
-          </div>
-        </div>
+      {qr && (
+        <Modal title={T.qrFor(qr.table.number)} onClose={closeQr}>
+          <img src={qr.qrData} alt={T.qrFor(qr.table.number)} className="mb-3 w-full rounded-2xl" />
+          <p className="mb-4 break-all text-xs text-ink/60">{T.url}: {qr.qrUrl}</p>
+          <Button fullWidth onClick={() => downloadQr(qr)}>{T.download}</Button>
+        </Modal>
       )}
-    </div>
+    </>
   );
 };
 

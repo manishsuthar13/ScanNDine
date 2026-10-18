@@ -3,6 +3,8 @@ const MenuItem = require('../models/MenuItem');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer'); // Ensure multer is imported
+const mongoose = require('mongoose');
+const { paginate } = require('../utils/pagination');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -20,10 +22,13 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage });
 
+// Guards against attaching an item to another restaurant's category
+const ownsCategory = (req, categoryId) =>
+  mongoose.isValidObjectId(categoryId) && MenuCategory.exists({ _id: categoryId, restaurantId: req.user.restaurantId });
+
 const getCategories = async (req, res) => {
   try {
-    const categories = await MenuCategory.find({ active: true }).sort({ displayOrder: 1 });
-    res.json(categories);
+    res.json(await paginate(MenuCategory, { restaurantId: req.user.restaurantId }, req.query, (q) => q.sort({ displayOrder: 1, createdAt: 1 })));
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
@@ -31,8 +36,10 @@ const getCategories = async (req, res) => {
 
 const getItems = async (req, res) => {
   try {
-    const items = await MenuItem.find({}).populate('categoryId', 'name');
-    res.json(items);
+    const filter = { restaurantId: req.user.restaurantId };
+    if (mongoose.isValidObjectId(req.query.categoryId)) filter.categoryId = req.query.categoryId;
+    if (['true', 'false'].includes(req.query.availability)) filter.availability = req.query.availability === 'true';
+    res.json(await paginate(MenuItem, filter, req.query, (q) => q.populate('categoryId', 'name').sort({ createdAt: -1 }), 12));
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
@@ -41,7 +48,7 @@ const getItems = async (req, res) => {
 const createCategory = async (req, res) => {
   const { name, displayOrder } = req.body;
   try {
-    const category = new MenuCategory({ name, displayOrder });
+    const category = new MenuCategory({ restaurantId: req.user.restaurantId, name, displayOrder });
     await category.save();
     res.status(201).json(category);
   } catch (error) {
@@ -52,8 +59,10 @@ const createCategory = async (req, res) => {
 const createItem = async (req, res) => {
   try {
     const { name, description, price, categoryId, availability } = req.body;
+    if (!(await ownsCategory(req, categoryId))) return res.status(400).json({ message: 'Invalid category' });
     const imageUrl = req.file ? req.file.path : null; // Cloudinary URL (e.g., https://res.cloudinary.com/.../image.jpg)
     const item = new MenuItem({
+      restaurantId: req.user.restaurantId,
       name,
       description,
       price: parseFloat(price),
@@ -74,6 +83,9 @@ const createItem = async (req, res) => {
 const updateItem = async (req, res) => {
   const { id } = req.params;
   try {
+    if (req.body.categoryId && !(await ownsCategory(req, req.body.categoryId))) {
+      return res.status(400).json({ message: 'Invalid category' });
+    }
     let updateData = {};
     if (req.file) {
       // FormData case (for full update with image)
@@ -87,10 +99,12 @@ const updateItem = async (req, res) => {
       };
     } else {
       // JSON case (for toggle)
-      updateData = req.body;
+      updateData = { ...req.body };
+      delete updateData.restaurantId;
       if (updateData.availability !== undefined) updateData.availability = updateData.availability === 'true' || updateData.availability === true;
     }
-    const item = await MenuItem.findByIdAndUpdate(id, updateData, { new: true });
+    const item = await MenuItem.findOneAndUpdate({ _id: id, restaurantId: req.user.restaurantId }, updateData, { new: true });
+    if (!item) return res.status(404).json({ message: 'Item not found' });
     res.json(item);
   } catch (error) {
   console.error("🔥 SERVER ERROR:", error.message);
@@ -103,7 +117,7 @@ const updateItem = async (req, res) => {
 const deleteItem = async (req, res) => {
   const { id } = req.params;
   try {
-    const item = await MenuItem.findById(id);
+    const item = await MenuItem.findOne({ _id: id, restaurantId: req.user.restaurantId });
     if (!item) return res.status(404).json({ message: 'Item not found' });
     
     // Optional: Delete image from Cloudinary (uncomment to enable)
@@ -112,7 +126,7 @@ const deleteItem = async (req, res) => {
       await cloudinary.uploader.destroy(`scanndine-uploads/${publicId}`);
     }
     
-    await MenuItem.findByIdAndDelete(id);
+    await item.deleteOne();
     res.json({ message: 'Item deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });

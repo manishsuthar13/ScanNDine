@@ -13,8 +13,9 @@ const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.get('/categories', getCategories);
-router.get('/items', getItems);
+// Admin-side menu management; customers read the menu through /api/public
+router.get('/categories', authenticate, authorize(['admin']), getCategories);
+router.get('/items', authenticate, authorize(['admin']), getItems);
 
 // Category
 router.post('/categories', authenticate, authorize(['admin']), createCategory);
