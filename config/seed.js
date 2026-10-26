@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const logger = require('../utils/logger');
+const { seedPlans } = require('./plans');
 
 // Indexes from the single-restaurant version that would block a second restaurant
 const dropLegacyIndexes = async () => {
@@ -12,6 +13,7 @@ const dropLegacyIndexes = async () => {
 // Seeds the one superadmin from SUPERADMIN_* env vars; never overwrites an existing one
 const seedSuperadmin = async () => {
   await dropLegacyIndexes();
+  await seedPlans();
 
   const { SUPERADMIN_USERNAME = 'superadmin', SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD } = process.env;
   if (await User.exists({ role: 'superadmin' })) return;

@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Restaurant = require('../models/Restaurant');
 
 const authenticate = async (req, res, next) => {
   const token = req.header('Authorization')?.replace('Bearer ', '');
@@ -12,6 +13,9 @@ const authenticate = async (req, res, next) => {
     const user = await User.findById(decoded.id);
     if (!user) {
       return res.status(401).json({ message: 'Invalid token.' });
+    }
+    if (user.restaurantId && await Restaurant.exists({ _id: user.restaurantId, status: 'suspended' })) {
+      return res.status(403).json({ message: 'This restaurant account is suspended. Please contact support.' });
     }
     req.user = user;
     next();

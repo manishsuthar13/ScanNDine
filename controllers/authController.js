@@ -4,6 +4,8 @@ const validator = require('validator');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const Query = require('../models/Query');
+const PlatformSettings = require('../models/PlatformSettings');
+const { DAY_MS } = require('../utils/billing');
 const { body } = require('express-validator');
 const { usernameRule, emailRule, passwordRule, validate, handleDuplicate, isId } = require('../utils/validation');
 const { accessToken, buildSession } = require('../utils/session');
@@ -30,11 +32,17 @@ const signup = [
     const { restaurantName, email, phone, username, password } = req.body;
     let restaurant;
     try {
+      const settings = await PlatformSettings.get();
+      if (!settings.allowSignups) return res.status(403).json({ message: 'New signups are currently closed' });
       if (await User.exists({ $or: [{ email }, { username }] })) {
         const emailTaken = await User.exists({ email });
         return res.status(409).json({ message: `That ${emailTaken ? 'email' : 'username'} is already taken` });
       }
-      restaurant = await Restaurant.create({ name: restaurantName, email, phone });
+      restaurant = await Restaurant.create({
+        name: restaurantName, email, phone,
+        planId: settings.defaultPlanId,
+        trialEndsAt: settings.trialDays ? new Date(Date.now() + settings.trialDays * DAY_MS) : null,
+      });
       const user = await User.create({ username, email, passwordHash: password, role: 'admin', restaurantId: restaurant._id });
       logger.info('Restaurant signed up', { restaurantId: restaurant._id, userId: user._id });
       res.status(201).json(buildSession(user, restaurant));
@@ -61,6 +69,9 @@ const login = [
         return res.status(401).json({ message: 'Invalid credentials' });
       }
       const restaurant = user.restaurantId ? await Restaurant.findById(user.restaurantId) : null;
+      if (restaurant?.status === 'suspended') {
+        return res.status(403).json({ message: 'This restaurant account is suspended. Please contact support.' });
+      }
       logger.info('Login', { userId: user._id, role: user.role });
       res.json(buildSession(user, restaurant));
     } catch (error) {

@@ -7,7 +7,7 @@ import { Card, Modal, Alert } from './ui';
 import { TEXT } from '../constants/text';
 
 const T = TEXT.admin.menu;
-const selectClass = 'rounded-full border border-ink/15 bg-surface px-4 py-2 text-sm shadow-soft';
+const selectClass = 'rounded-full border border-ink/30 bg-surface px-4 py-2 text-sm';
 
 const AdminMenu = () => {
   const menu = useAdminMenu();

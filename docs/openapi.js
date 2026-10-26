@@ -15,6 +15,11 @@ const paged = (item) => ({
 });
 const body = (properties, required = []) => ({ required: true, ...json({ type: 'object', required, properties }) });
 const str = { type: 'string' };
+const PLAN_PROPS = {
+  name: str, description: str, monthlyPrice: { type: 'number' }, annualPrice: { type: 'number' },
+  maxQrs: { type: 'integer', nullable: true, description: 'Empty = unlimited' }, maxStaff: { type: 'integer', nullable: true }, maxDishes: { type: 'integer', nullable: true, description: 'Across all categories' },
+  points: { type: 'array', items: { type: 'object', properties: { text: str, show: { type: 'boolean' } } } },
+};
 const errors = {
   400: ok('Validation failed', ref('Error')),
   401: ok('Missing or invalid token', ref('Error')),
@@ -93,11 +98,49 @@ module.exports = {
     },
     '/auth/queries/{id}': { delete: secured('Auth', 'Admin: clear a query', { parameters: [idParam] }) },
 
-    '/superadmin/overview': { get: secured('Superadmin', 'Platform-wide totals') },
-    '/superadmin/restaurants': { get: secured('Superadmin', 'Restaurants with admins, staff, orders and revenue', {
-      parameters: [...pageParams, { name: 'search', in: 'query', schema: str }],
+    '/superadmin/overview': { get: secured('Superadmin', 'Restaurant (total, active, locked), admin and staff totals') },
+    '/superadmin/analytics': { get: secured('Superadmin', 'Platform analytics: user, plan and restaurant counts, platform fees collected, and fee/new-user series (daily, or monthly for long ranges)', {
+      parameters: [
+        { name: 'from', in: 'query', description: 'Inclusive start date, YYYY-MM-DD (default: 29 days ago)', schema: str },
+        { name: 'to', in: 'query', description: 'Inclusive end date, YYYY-MM-DD (default: today); range max 400 days', schema: str },
+      ],
     }) },
-    '/superadmin/restaurants/{id}': { get: secured('Superadmin', 'One restaurant: admins, staff, stats, recent orders', { parameters: [idParam] }) },
+    '/superadmin/restaurants': { get: secured('Superadmin', 'Restaurants with plan, status, admin logins, tables and staff counts', {
+      parameters: [...pageParams, { name: 'search', in: 'query', schema: str }, { name: 'status', in: 'query', schema: { type: 'string', enum: ['active', 'suspended'] } }, { name: 'planId', in: 'query', description: 'A plan id, or `none`', schema: str }],
+    }) },
+    '/superadmin/restaurants/{id}': {
+      get: secured('Superadmin', 'One restaurant: plan, admins, staff, stats, invoices, recent orders', { parameters: [idParam] }),
+      patch: secured('Superadmin', 'Change status (suspending blocks its users), plan, name or phone', {
+        parameters: [idParam], requestBody: body({ status: { type: 'string', enum: ['active', 'suspended'] }, planId: str, name: str, phone: str }, []),
+      }),
+    },
+    '/superadmin/plans': {
+      get: secured('Superadmin', 'Pricing plans with restaurant counts and monthly revenue'),
+      post: secured('Superadmin', 'Create a plan', { requestBody: body(PLAN_PROPS, ['name', 'monthlyPrice', 'annualPrice']) }),
+    },
+    '/superadmin/plans/{id}': {
+      put: secured('Superadmin', 'Update a plan (set `active` false to retire it)', { parameters: [idParam], requestBody: body({ ...PLAN_PROPS, active: { type: 'boolean' } }, ['name', 'monthlyPrice', 'annualPrice']) }),
+      delete: secured('Superadmin', 'Delete an unused plan', { parameters: [idParam] }),
+    },
+    '/superadmin/billing/summary': { get: secured('Superadmin', 'MRR, outstanding and overdue amounts, all-time collected') },
+    '/superadmin/invoices': {
+      get: secured('Superadmin', 'Invoices; `status` may also be `overdue`', {
+        parameters: [...pageParams, { name: 'status', in: 'query', schema: str }, { name: 'period', in: 'query', description: 'YYYY-MM', schema: str }, { name: 'search', in: 'query', schema: str }, { name: 'restaurantId', in: 'query', schema: str }],
+      }),
+      post: secured('Superadmin', 'Create an invoice: the plan (monthly or annual price) plus optional items (qrs, staff, dishes) at a rate per unit, less a discount', {
+        description: 'Total = plan price + sum(quantity x rate) - discount. `dueDate` (YYYY-MM-DD) must be within 30 days (monthly) or 365 days (annual) of today. The restaurant is moved onto the plan and gets the item quantities as extra capacity.',
+        requestBody: body({
+          restaurantId: str, planId: str, cycle: { type: 'string', enum: ['monthly', 'annual'] }, dueDate: str,
+          items: { type: 'array', items: { type: 'object', properties: { kind: { type: 'string', enum: ['qrs', 'staff', 'dishes'] }, quantity: { type: 'integer' }, rate: { type: 'number' } } } },
+          discount: { type: 'object', properties: { type: { type: 'string', enum: ['percent', 'amount'] }, value: { type: 'number' } } },
+        }, ['restaurantId', 'planId', 'cycle', 'dueDate']),
+      }),
+    },
+    '/superadmin/invoices/{id}': { patch: secured('Superadmin', 'Mark an invoice pending, paid or void', { parameters: [idParam], requestBody: body({ status: { type: 'string', enum: ['pending', 'paid', 'void'] } }, ['status']) }) },
+    '/superadmin/settings': {
+      get: secured('Superadmin', 'Platform signup and invoicing settings'),
+      put: secured('Superadmin', 'Update settings', { requestBody: body({ allowSignups: { type: 'boolean' }, defaultPlanId: str, trialDays: { type: 'integer' }, taxPercent: { type: 'number' }, invoiceDueDays: { type: 'integer' }, invoicePrefix: str }, []) }),
+    },
     '/superadmin/admins': { post: secured('Superadmin', 'Create an admin for an existing or new restaurant', {
       description: 'Send `restaurantId` for an existing restaurant, or `restaurantName` (and optional `phone`) to create one.',
       requestBody: body({ ...credentials, restaurantId: str, restaurantName: str, phone: str }, ['username', 'email', 'password']),

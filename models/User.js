@@ -13,6 +13,8 @@ const userSchema = new mongoose.Schema({
     default: null,
     required: function () { return this.role !== 'superadmin'; },
   },
+  // Set by the superadmin to block an account (enforcement is not wired up yet)
+  locked: { type: Boolean, default: false },
   // Forgot-password flow: only a hash of the emailed token is stored
   resetTokenHash: { type: String, default: null, select: false },
   resetTokenExpires: { type: Date, default: null, select: false },

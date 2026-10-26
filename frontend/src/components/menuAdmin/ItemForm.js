@@ -11,7 +11,7 @@ const RULES = {
   price: (v) => (Number(v) > 0 ? '' : TEXT.validation.required),
 };
 
-const selectClass = 'w-full rounded-xl border border-ink/15 bg-surface px-4 py-3 text-sm shadow-soft';
+const selectClass = 'w-full rounded-xl border border-ink/30 bg-surface px-4 py-3 text-sm';
 
 // Used both to add an item and to edit one (pass `initial` and a different submit label)
 const ItemForm = ({ categories, initial, submitLabel, onSubmit, loading, error, resetOnSuccess }) => {

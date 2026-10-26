@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { api } from '../services/api';
 import { usePaginatedList } from './usePaginatedList';
 import { errorMessage } from '../utils/errors';
+import { useToast, useConfirm } from '../components/ui';
 import { TEXT } from '../constants/text';
 
 // Tables (paginated) with QR generation/preview, add and delete
@@ -10,6 +11,8 @@ export const useAdminTables = () => {
   const [qr, setQr] = useState(null);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const guarded = useCallback(async (fn) => {
     setError('');
@@ -20,19 +23,18 @@ export const useAdminTables = () => {
     }
   }, []);
 
-  const addTable = () => {
-    const number = window.prompt(TEXT.admin.tables.enterNumber);
-    if (!number) return undefined;
-    return guarded(async () => {
-      await api.createTable({ number: parseInt(number, 10) });
-      tables.reload();
-    });
+  // Errors propagate so the add-table dialog can show them
+  const addTable = async (number) => {
+    await api.createTable({ number });
+    toast.success(TEXT.toast.tableCreated(number));
+    tables.reload();
   };
 
-  const deleteTable = (table) => {
-    if (!window.confirm(TEXT.admin.tables.confirmDelete(table.number))) return undefined;
-    return guarded(async () => {
+  const deleteTable = async (table) => {
+    if (!await confirm({ title: TEXT.admin.tables.confirmDelete(table.number), message: TEXT.common.irreversible, confirmLabel: TEXT.common.delete, danger: true })) return;
+    await guarded(async () => {
       await api.deleteTable(table._id);
+      toast.success(TEXT.toast.tableDeleted(table.number));
       tables.reload();
     });
   };
@@ -42,6 +44,7 @@ export const useAdminTables = () => {
     return guarded(async () => {
       const res = await api.generateQR(table._id);
       setQr({ qrData: res.data.qrData, qrUrl: res.data.qrUrl, table });
+      toast.success(TEXT.toast.qrGenerated(table.number));
       tables.reload({ silent: true });
     }).finally(() => setBusyId(null));
   };

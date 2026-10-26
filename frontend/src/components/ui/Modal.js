@@ -16,7 +16,7 @@ const Modal = ({ title, subtitle, onClose, wide = false, children }) => {
         role="dialog"
         aria-modal="true"
         onMouseDown={(e) => e.stopPropagation()}
-        className={`max-h-full w-full overflow-y-auto rounded-3xl bg-surface p-6 shadow-card ${wide ? 'max-w-3xl' : 'max-w-sm'}`}
+        className={`max-h-full w-full overflow-y-auto rounded-3xl bg-surface p-6 shadow-card ${wide ? 'max-w-3xl lg:max-w-none lg:w-[70vw]' : 'max-w-sm'}`}
       >
         {title && <h3 className="text-xl font-bold">{title}</h3>}
         {subtitle && <p className="mb-4 text-sm text-ink/60">{subtitle}</p>}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import RestaurantPicker from './RestaurantPicker';
-import { Card, Button, TextField, Alert } from '../ui';
+import { Card, Button, TextField, Alert, useToast } from '../ui';
 import { useForm } from '../../hooks/useForm';
 import { useAsyncAction } from '../../hooks/useAsyncAction';
 import { api } from '../../services/api';
@@ -22,7 +22,7 @@ const CreateAdminForm = ({ onCreated }) => {
   const [isNew, setIsNew] = useState(false);
   const [restaurant, setRestaurant] = useState(null);
   const [pickError, setPickError] = useState('');
-  const [success, setSuccess] = useState('');
+  const toast = useToast();
   const form = useForm({ username: '', email: '', password: '', restaurantName: '', phone: '' }, makeRules(isNew));
   const action = useAsyncAction();
 
@@ -31,7 +31,6 @@ const CreateAdminForm = ({ onCreated }) => {
 
   const submit = (e) => {
     e.preventDefault();
-    setSuccess('');
     const valid = form.validateAll();
     if (!isNew && !restaurant) { setPickError(TEXT.validation.required); return; }
     if (!valid) return;
@@ -39,7 +38,7 @@ const CreateAdminForm = ({ onCreated }) => {
       const { username, email, password, restaurantName, phone } = form.values;
       const payload = isNew ? { username, email, password, restaurantName, phone } : { username, email, password, restaurantId: restaurant._id };
       const res = await api.createAdminAsSuperadmin(payload);
-      setSuccess(`${res.data.user.username} → ${res.data.restaurant.name}`);
+      toast.success(TEXT.toast.adminCreated(res.data.user.username, res.data.restaurant.name));
       form.reset();
       setRestaurant(null);
       onCreated();
@@ -72,7 +71,6 @@ const CreateAdminForm = ({ onCreated }) => {
           <TextField label={TEXT.team.passwordPlaceholder} type="password" autoComplete="new-password" {...form.bind('password')} />
         </div>
         <Alert>{action.error}</Alert>
-        <Alert tone="success">{success}</Alert>
         <Button type="submit" loading={action.loading}>{T.create}</Button>
       </form>
     </Card>

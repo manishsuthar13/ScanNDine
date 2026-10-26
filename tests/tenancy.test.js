@@ -109,10 +109,12 @@ describe('menu, tables and orders', () => {
 describe('superadmin', () => {
   it('reports totals and per-restaurant stats', async () => {
     const { totals } = (await api('get', '/superadmin/overview', { token: superToken })).body;
-    expect(totals).toMatchObject({ restaurants: 2, orders: 1, revenue: 400 });
+    expect(totals).toMatchObject({ restaurants: 2, active: 2, locked: 0 });
     const list = (await api('get', '/superadmin/restaurants', { token: superToken })).body;
     const row = list.data.find((r) => r._id === A.restaurant._id);
-    expect(row).toMatchObject({ staff: 4, admins: 1, tables: 1, orders: 1, revenue: 400 });
+    expect(row).toMatchObject({ staff: 4, tables: 1 })
+    expect(row.admins).toHaveLength(1);
+    expect(row.admins[0]).toEqual({ username: expect.any(String), email: expect.any(String) });;
     expect(list.pagination.total).toBe(2);
   });
 

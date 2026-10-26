@@ -5,6 +5,7 @@ export const ORDER_STATUS = {
   ready: { label: 'Ready', tone: 'success' },
   served: { label: 'Served', tone: 'neutral' },
   canceled: { label: 'Canceled', tone: 'neutral' },
+  cleared: { label: 'Cleared', tone: 'neutral' },
 };
 
 export const STAFF_STATUS_STEPS = ['placed', 'preparing', 'ready'];

@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { api } from '../services/api';
 import { updateStoredUser } from '../services/session';
 import { useAsyncAction } from '../hooks/useAsyncAction';
 import { useForm } from '../hooks/useForm';
-import { Modal, TextField, Button, Alert } from './ui';
+import { Modal, TextField, Button, Alert, useToast } from './ui';
 import PasswordChecklist from './auth/PasswordChecklist';
 import { validateEmail, validateUsername, validatePassword, validateRequired } from '../utils/validators';
 import { TEXT } from '../constants/text';
@@ -18,28 +18,26 @@ const AccountModal = ({ user, restaurant, onClose, onUpdated }) => {
   const password = useForm({ currentPassword: '', newPassword: '' }, PASSWORD_RULES);
   const detailsAction = useAsyncAction();
   const passwordAction = useAsyncAction();
-  const [notice, setNotice] = useState('');
+  const toast = useToast();
 
   const saveDetails = (e) => {
     e.preventDefault();
-    setNotice('');
     if (!details.validateAll()) return;
     detailsAction.run(async () => {
       const res = await api.updateMe(details.values);
       updateStoredUser(res.data);
       onUpdated(res.data);
-      setNotice(T.detailsSaved);
+      toast.success(T.detailsSaved);
     });
   };
 
   const savePassword = (e) => {
     e.preventDefault();
-    setNotice('');
     if (!password.validateAll()) return;
     passwordAction.run(async () => {
       await api.changePassword(password.values);
       password.reset();
-      setNotice(T.passwordSaved);
+      toast.success(T.passwordSaved);
     });
   };
 
@@ -60,7 +58,6 @@ const AccountModal = ({ user, restaurant, onClose, onUpdated }) => {
         <Button type="submit" variant="accent" loading={passwordAction.loading}>{T.changePassword}</Button>
       </form>
 
-      <Alert tone="success">{notice}</Alert>
     </Modal>
   );
 };

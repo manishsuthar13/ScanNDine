@@ -20,7 +20,7 @@ const QueryBox = () => {
           onChange={(e) => setMessage(e.target.value)}
           placeholder={T.queryPlaceholder}
           rows="3"
-          className="mb-3 w-full rounded-xl border border-ink/15 bg-surface p-3 text-sm shadow-soft placeholder:text-ink/40"
+          className="mb-3 w-full rounded-xl border border-ink/30 bg-surface p-3 text-sm placeholder:text-ink/40"
         />
         <Alert>{error}</Alert>
         {sent && <Alert tone="success">{T.querySent}</Alert>}

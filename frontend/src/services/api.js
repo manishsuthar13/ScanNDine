@@ -61,6 +61,18 @@ export const api = {
   getRestaurants: (params) => http.get('/superadmin/restaurants', { params }),
   getRestaurantDetail: (id) => http.get(`/superadmin/restaurants/${id}`),
   createAdminAsSuperadmin: (data) => http.post('/superadmin/admins', data),
+  getPlatformAnalytics: (params) => http.get('/superadmin/analytics', { params }),
+  updateRestaurant: (id, data) => http.patch(`/superadmin/restaurants/${id}`, data),
+  getPlans: () => http.get('/superadmin/plans'),
+  createPlan: (data) => http.post('/superadmin/plans', data),
+  updatePlan: (id, data) => http.put(`/superadmin/plans/${id}`, data),
+  deletePlan: (id) => http.delete(`/superadmin/plans/${id}`),
+  getBillingSummary: () => http.get('/superadmin/billing/summary'),
+  getInvoices: (params) => http.get('/superadmin/invoices', { params }),
+  createInvoice: (data) => http.post('/superadmin/invoices', data),
+  updateInvoice: (id, data) => http.patch(`/superadmin/invoices/${id}`, data),
+  getPlatformSettings: () => http.get('/superadmin/settings'),
+  updatePlatformSettings: (data) => http.put('/superadmin/settings', data),
 
   // admin: team
   getStaff: (params) => http.get('/admin/staff', { params }),

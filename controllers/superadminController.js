@@ -3,6 +3,10 @@ const User = require('../models/User');
 const Table = require('../models/Table');
 const MenuItem = require('../models/MenuItem');
 const Order = require('../models/Order');
+const Plan = require('../models/Plan');
+const Invoice = require('../models/Invoice');
+const PlatformSettings = require('../models/PlatformSettings');
+const { DAY_MS } = require('../utils/billing');
 const { body } = require('express-validator');
 const { usernameRule, emailRule, passwordRule, validate, handleDuplicate, isId } = require('../utils/validation');
 
@@ -40,33 +44,47 @@ const loadStats = async (ids) => {
   return entry;
 };
 
-// Platform-wide totals (independent of any list page)
+// Platform-wide totals (independent of any list page). "Locked" restaurants are the suspended ones.
 const overview = async (req, res) => {
   try {
-    const [restaurants, admins, staff, [orderTotals]] = await Promise.all([
+    const [restaurants, locked, admins, staff] = await Promise.all([
       Restaurant.countDocuments(),
+      Restaurant.countDocuments({ status: 'suspended' }),
       User.countDocuments({ role: 'admin' }),
       User.countDocuments({ role: 'staff' }),
-      Order.aggregate([
-        { $match: { status: { $ne: 'canceled' } } },
-        { $group: { _id: null, orders: { $sum: 1 }, revenue: { $sum: '$totals' } } },
-      ]),
     ]);
-    res.json({ totals: { restaurants, admins, staff, orders: orderTotals?.orders || 0, revenue: orderTotals?.revenue || 0 } });
+    res.json({ totals: { restaurants, active: restaurants - locked, locked, admins, staff } });
   } catch (error) {
     logger.error('superadmin overview error', { error: error.message });
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// Paginated restaurants with stats; ?search= filters by name
+// Paginated restaurants with stats; ?search= filters by name, ?status= and ?planId= narrow further
 const listRestaurants = async (req, res) => {
   try {
-    const filter = req.query.search ? { name: { $regex: escapeRegex(req.query.search), $options: 'i' } } : {};
-    const { data, pagination } = await paginate(Restaurant, filter, req.query, (q) => q.sort({ createdAt: -1 }));
-    const statsFor = await loadStats(data.map((r) => r._id));
+    const { search, status, planId } = req.query;
+    const filter = {};
+    if (search) filter.name = { $regex: escapeRegex(search), $options: 'i' };
+    if (['active', 'suspended'].includes(status)) filter.status = status;
+    if (planId === 'none') filter.planId = null;
+    else if (planId && isId(planId)) filter.planId = planId;
+    const { data, pagination } = await paginate(Restaurant, filter, req.query, (q) => q.populate('planId', 'name monthlyPrice').sort({ createdAt: -1 }));
+    const ids = data.map((r) => r._id);
+    const [statsFor, admins] = await Promise.all([
+      loadStats(ids),
+      User.find({ restaurantId: { $in: ids }, role: 'admin' }).sort({ createdAt: 1 }).select('username email restaurantId'),
+    ]);
+    const adminsOf = (id) => admins.filter((a) => String(a.restaurantId) === String(id)).map((a) => ({ username: a.username, email: a.email }));
     res.json({
-      data: data.map((r) => ({ _id: r._id, name: r.name, email: r.email, phone: r.phone, createdAt: r.createdAt, ...statsFor(r._id) })),
+      data: data.map((r) => {
+        const { tables, staff } = statsFor(r._id);
+        return {
+          _id: r._id, name: r.name, email: r.email, phone: r.phone, createdAt: r.createdAt,
+          status: r.status, plan: r.planId ? { _id: r.planId._id, name: r.planId.name, monthlyPrice: r.planId.monthlyPrice } : null,
+          trialEndsAt: r.trialEndsAt, tables, staff, admins: adminsOf(r._id),
+        };
+      }),
       pagination,
     });
   } catch (error) {
@@ -78,15 +96,18 @@ const listRestaurants = async (req, res) => {
 const restaurantDetail = async (req, res) => {
   if (!isId(req.params.id)) return res.status(400).json({ message: 'Invalid id' });
   try {
-    const restaurant = await Restaurant.findById(req.params.id);
+    const restaurant = await Restaurant.findById(req.params.id).populate('planId', 'name monthlyPrice annualPrice');
     if (!restaurant) return res.status(404).json({ message: 'Restaurant not found' });
-    const [users, recentOrders, statsFor] = await Promise.all([
+    const [users, recentOrders, statsFor, invoices] = await Promise.all([
       User.find({ restaurantId: restaurant._id }).sort({ createdAt: 1 }),
       Order.find({ restaurantId: restaurant._id }).sort({ createdAt: -1 }).limit(10).populate('tableId', 'number'),
       loadStats([restaurant._id]),
+      Invoice.find({ restaurantId: restaurant._id }).sort({ period: -1 }).limit(12),
     ]);
+    const { planId: plan, ...restaurantFields } = restaurant.toJSON();
     res.json({
-      restaurant,
+      restaurant: { ...restaurantFields, plan: plan || null },
+      invoices,
       stats: statsFor(restaurant._id),
       admins: users.filter((u) => u.role === 'admin'),
       staff: users.filter((u) => u.role === 'staff'),
@@ -117,7 +138,12 @@ const createAdmin = [
         if (!restaurant) return res.status(404).json({ message: 'Restaurant not found' });
       } else {
         // A new restaurant takes the first admin's email as its contact email
-        restaurant = created = await Restaurant.create({ name: restaurantName, email, phone });
+        const settings = await PlatformSettings.get();
+        restaurant = created = await Restaurant.create({
+          name: restaurantName, email, phone,
+          planId: settings.defaultPlanId,
+          trialEndsAt: settings.trialDays ? new Date(Date.now() + settings.trialDays * DAY_MS) : null,
+        });
       }
       const user = await User.create({ username, email, passwordHash: password, role: 'admin', restaurantId: restaurant._id });
       logger.info('Admin created by superadmin', { userId: user._id, restaurantId: restaurant._id });
@@ -131,4 +157,130 @@ const createAdmin = [
   },
 ];
 
-module.exports = { overview, listRestaurants, restaurantDetail, createAdmin };
+// Change a restaurant's status or plan (suspending blocks its users from logging in)
+const updateRestaurant = [
+  body('status').optional().isIn(['active', 'suspended']).withMessage('Status must be active or suspended'),
+  body('planId').optional({ values: 'null' }).custom(isId).withMessage('Invalid plan'),
+  body('name').optional().trim().isLength({ min: 2, max: 100 }).withMessage('Restaurant name is required'),
+  body('phone').optional({ values: 'falsy' }).trim().matches(/^[0-9+()\-\s]{7,20}$/).withMessage('Enter a valid phone number'),
+  validate,
+  async (req, res) => {
+    if (!isId(req.params.id)) return res.status(400).json({ message: 'Invalid id' });
+    try {
+      const update = {};
+      ['status', 'planId', 'name', 'phone'].forEach((k) => { if (req.body[k] !== undefined) update[k] = req.body[k]; });
+      if (update.planId && !(await Plan.exists({ _id: update.planId }))) return res.status(404).json({ message: 'Plan not found' });
+      const restaurant = await Restaurant.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
+      if (!restaurant) return res.status(404).json({ message: 'Restaurant not found' });
+      logger.info('Restaurant updated by superadmin', { restaurantId: restaurant._id, update });
+      res.json(restaurant);
+    } catch (error) {
+      logger.error('superadmin updateRestaurant error', { error: error.message });
+      res.status(500).json({ message: 'Server error' });
+    }
+  },
+];
+
+const startOfUtcDay = (date) => new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_RANGE_DAYS = 400;
+const DAILY_SERIES_MAX_DAYS = 92;
+
+// Parses ?from= and ?to= (inclusive YYYY-MM-DD, UTC). Defaults to the last 30 days; returns null when invalid.
+const parseRange = ({ from, to }) => {
+  const today = startOfUtcDay(new Date());
+  const parse = (v) => {
+    if (!DATE_RE.test(v)) return null;
+    const d = new Date(`${v}T00:00:00Z`);
+    return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v ? null : d;
+  };
+  const start = from ? parse(from) : new Date(today.getTime() - 29 * DAY_MS);
+  const last = to ? parse(to) : today;
+  if (!start || !last || last < start) return null;
+  const days = Math.round((last - start) / DAY_MS) + 1;
+  return days > MAX_RANGE_DAYS ? null : { start, end: new Date(last.getTime() + DAY_MS), days };
+};
+
+// Platform analytics for ?from=&to= (inclusive dates) compared with the equally long period before it
+const analytics = async (req, res) => {
+  try {
+    const range = parseRange(req.query);
+    if (!range) return res.status(400).json({ message: `Choose a valid date range of at most ${MAX_RANGE_DAYS} days` });
+    const { days } = range;
+    const from = range.start;
+    const to = range.end;
+    const monthly = days > DAILY_SERIES_MAX_DAYS;
+    const seriesFormat = monthly ? '%Y-%m' : '%Y-%m-%d';
+    const paidInRange = { status: 'paid', paidAt: { $gte: from, $lt: to } };
+    const teamInRange = { role: { $in: ['admin', 'staff'] }, createdAt: { $gte: from, $lt: to } };
+
+    const [byStatus, byPlan, userCounts, planCount, feesTotal, feesDaily, feesByPlan, newUsers] = await Promise.all([
+      Restaurant.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      Restaurant.aggregate([
+        { $lookup: { from: 'plans', localField: 'planId', foreignField: '_id', as: 'plan' } },
+        { $group: { _id: { $ifNull: [{ $arrayElemAt: ['$plan.name', 0] }, 'No plan'] }, count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]),
+      User.aggregate([
+        { $match: { role: { $in: ['admin', 'staff'] } } },
+        { $group: { _id: { role: '$role', locked: { $eq: ['$locked', true] } }, count: { $sum: 1 } } },
+      ]),
+      Plan.countDocuments(),
+      Invoice.aggregate([{ $match: paidInRange }, { $group: { _id: null, amount: { $sum: '$amount' } } }]),
+      Invoice.aggregate([
+        { $match: paidInRange },
+        { $group: { _id: { $dateToString: { format: seriesFormat, date: '$paidAt' } }, amount: { $sum: '$amount' } } },
+      ]),
+      Invoice.aggregate([
+        { $match: paidInRange },
+        { $group: { _id: '$planName', amount: { $sum: '$amount' } } },
+        { $sort: { amount: -1 } },
+      ]),
+      User.aggregate([
+        { $match: teamInRange },
+        { $group: { _id: { $dateToString: { format: seriesFormat, date: '$createdAt' } }, admins: { $sum: { $cond: [{ $eq: ['$role', 'admin'] }, 1, 0] } }, staff: { $sum: { $cond: [{ $eq: ['$role', 'staff'] }, 1, 0] } } } },
+      ]),
+    ]);
+
+    // One entry per day (or per month for long ranges), zero-filled
+    const keys = [];
+    if (monthly) {
+      for (let d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1)); d < to; d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1))) keys.push(d.toISOString().slice(0, 7));
+    } else {
+      for (let i = 0; i < days; i += 1) keys.push(new Date(from.getTime() + i * DAY_MS).toISOString().slice(0, 10));
+    }
+    const feesMap = new Map(feesDaily.map((f) => [f._id, f.amount]));
+    const usersMap = new Map(newUsers.map((u) => [u._id, u]));
+
+    const usersWhere = (role, locked) => userCounts.find((u) => u._id.role === role && u._id.locked === locked)?.count || 0;
+    const users = {
+      admins: usersWhere('admin', false) + usersWhere('admin', true),
+      staff: usersWhere('staff', false) + usersWhere('staff', true),
+      locked: usersWhere('admin', true) + usersWhere('staff', true),
+    };
+    users.total = users.admins + users.staff;
+    users.active = users.total - users.locked;
+    const restaurantStatus = Object.fromEntries(byStatus.map((s) => [s._id, s.count]));
+
+    res.json({
+      days,
+      from: from.toISOString().slice(0, 10),
+      to: new Date(to.getTime() - DAY_MS).toISOString().slice(0, 10),
+      granularity: monthly ? 'month' : 'day',
+      users,
+      totalPlans: planCount,
+      restaurants: { active: restaurantStatus.active || 0, suspended: restaurantStatus.suspended || 0, total: (restaurantStatus.active || 0) + (restaurantStatus.suspended || 0) },
+      platformEarned: feesTotal[0]?.amount || 0,
+      feesSeries: keys.map((date) => ({ date, amount: feesMap.get(date) || 0 })),
+      usersSeries: keys.map((date) => ({ date, admins: usersMap.get(date)?.admins || 0, staff: usersMap.get(date)?.staff || 0 })),
+      feesByPlan: feesByPlan.map((f) => ({ name: f._id, amount: f.amount })),
+      plans: byPlan.map((p) => ({ name: p._id, count: p.count })),
+    });
+  } catch (error) {
+    logger.error('superadmin analytics error', { error: error.message });
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+module.exports = { overview, analytics, listRestaurants, restaurantDetail, updateRestaurant, createAdmin };

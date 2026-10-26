@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAdminTables } from '../hooks/useAdminTables';
-import { Card, Button, Modal, Alert, Pagination, Spinner } from './ui';
+import { Card, Button, Modal, Alert, Pagination, Spinner, TextField } from './ui';
+import { useAsyncAction } from '../hooks/useAsyncAction';
 import { TEXT } from '../constants/text';
 
 const T = TEXT.admin.tables;
@@ -26,13 +27,39 @@ const downloadQr = ({ qrData, table }) => {
   link.click();
 };
 
+// Asks for the table number in a dialog (replaces the browser prompt)
+const AddTableModal = ({ onAdd, onClose }) => {
+  const [number, setNumber] = useState('');
+  const [invalid, setInvalid] = useState('');
+  const action = useAsyncAction();
+
+  const submit = (e) => {
+    e.preventDefault();
+    const n = Number(number);
+    if (!Number.isInteger(n) || n < 1) { setInvalid(TEXT.validation.required); return; }
+    action.run(async () => { await onAdd(n); onClose(); });
+  };
+
+  return (
+    <Modal title={T.addTable} onClose={onClose}>
+      <form onSubmit={submit} noValidate className="mt-4">
+        <TextField label={T.numberLabel} type="number" min="1" step="1" autoFocus value={number} error={invalid}
+          onChange={(e) => { setNumber(e.target.value); setInvalid(''); }} />
+        <Alert>{action.error}</Alert>
+        <Button type="submit" fullWidth loading={action.loading}>{T.addTable}</Button>
+      </form>
+    </Modal>
+  );
+};
+
 const AdminTables = () => {
+  const [adding, setAdding] = useState(false);
   const { tables, qr, closeQr, error, busyId, addTable, deleteTable, generate, show } = useAdminTables();
 
   return (
     <>
       <h2 className="mb-4 text-2xl font-extrabold">{T.title}</h2>
-      <Card title={T.listTitle} action={<Button onClick={addTable}>{T.addTable}</Button>}>
+      <Card title={T.listTitle} action={<Button onClick={() => setAdding(true)}>{T.addTable}</Button>}>
         <Alert>{error || tables.error}</Alert>
         {tables.loading && tables.items.length === 0 ? <Spinner /> : (
           <ul>
@@ -44,6 +71,8 @@ const AdminTables = () => {
         )}
         <Pagination pagination={tables.pagination} onPage={tables.setPage} disabled={tables.loading} />
       </Card>
+
+      {adding && <AddTableModal onAdd={addTable} onClose={() => setAdding(false)} />}
 
       {qr && (
         <Modal title={T.qrFor(qr.table.number)} onClose={closeQr}>

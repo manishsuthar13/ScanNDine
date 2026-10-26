@@ -6,7 +6,7 @@ QR-code restaurant ordering. Customers scan a table QR code and order - no accou
 
 | Role | How it is created | Can do |
 | --- | --- | --- |
-| **Superadmin** | Seeded once from `SUPERADMIN_*` in `.env` | See every restaurant with admins, staff, orders and revenue; create admins |
+| **Superadmin** | Seeded once from `SUPERADMIN_*` in `.env` | Platform analytics, manage restaurants (plan, suspend), pricing plans, monthly invoicing and platform settings; create admins |
 | **Admin** | Restaurant signup (first admin) or created by another admin / the superadmin | Menu, tables + QR codes, team (staff and more admins), analytics, staff queries |
 | **Staff** | Created by an admin only | Live order board, order status, send queries to admins |
 | **Customer** | Nobody - opens `/menu?r=<restaurantId>&table=table-N` from the QR code | Browse the menu, order, follow order status |

@@ -18,7 +18,7 @@ const TextField = ({ label, error, hint, type = 'text', className = '', id, ...r
           id={fieldId}
           type={isPassword && visible ? 'text' : type}
           aria-invalid={Boolean(error)}
-          className={`w-full rounded-xl border bg-surface px-4 py-3 text-sm text-ink shadow-soft placeholder:text-ink/40 focus:border-primary ${error ? 'border-primary' : 'border-ink/15'} ${isPassword ? 'pr-16' : ''}`}
+          className={`w-full rounded-xl border bg-surface px-4 py-3 text-sm text-ink placeholder:text-ink/40 focus:border-primary ${error ? 'border-primary' : 'border-ink/30'} ${isPassword ? 'pr-16' : ''}`}
           {...rest}
         />
         {isPassword && (
